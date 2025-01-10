@@ -1,26 +1,30 @@
 package main
-
 import (
+	_ "citizen_system_back/docs"
 	"fmt"
 	"os"
+	"log"
+	"encoding/base64"
+	"io/ioutil"
 
 	"github.com/gin-gonic/gin"
-    "github.com/sirupsen/logrus"
-    "github.com/swaggo/files"          // Alias as swaggerFiles
-    "github.com/swaggo/gin-swagger"    // Swagger handler
-    "gorm.io/driver/postgres"
-    "gorm.io/gorm"
+	"github.com/sirupsen/logrus"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"github.com/joho/godotenv"
 
-	//_ "citizen_system_back/docs" // Swag generated docs package
-	//_ "example.com/citizen_system_back/docs"
-
+	swaggerFiles "github.com/swaggo/files"
+  ginSwagger "github.com/swaggo/gin-swagger"
 )
+
 
 // @title Asset Tax API
 // @version 1.0
 // @description API to manage assets and calculate taxes.
 // @host localhost:8080
 // @BasePath /api/v1
+
+// Config holds database configuration
 
 // Config holds database configuration
 type Config struct {
@@ -30,6 +34,7 @@ type Config struct {
 	Password string
 	DBName   string
 	SSLMode  string
+	SSLCert  string // New field for SSL certificate
 }
 
 // Logger instance
@@ -38,7 +43,8 @@ var logger = logrus.New()
 // Database instance
 var db *gorm.DB
 
-// initDB initializes the database connection
+// initDB initializes the database connection with SSL
+// initDB initializes the database connection with SSL
 func initDB() *gorm.DB {
 	config := Config{
 		Host:     "bedrock-dev-db.cluster-cq6wq7ckjmhj.ap-southeast-1.rds.amazonaws.com",
@@ -46,18 +52,51 @@ func initDB() *gorm.DB {
 		User:     "sts_dev_app",
 		Password: "9{Ll&&6{!Cm4d5M#",
 		DBName:   "sts_dev",
-		SSLMode:  "disable",
+		SSLMode:  "verify-full",
+		SSLCert:  os.Getenv("DATABASE_SSL_CERT"),
 	}
 
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		config.Host, config.Port, config.User, config.Password, config.DBName, config.SSLMode)
+	// Create a temporary file to store the certificate
+	tmpFile, err := ioutil.TempFile("", "postgres-cert-*.pem")
+	if err != nil {
+		logger.Fatalf("Failed to create temporary file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	// Decode base64 SSL certificate and write to temp file
+	certBytes, err := base64.StdEncoding.DecodeString(config.SSLCert)
+	if err != nil {
+		logger.Fatalf("Failed to decode SSL certificate: %v", err)
+	}
+	if _, err := tmpFile.Write(certBytes); err != nil {
+		logger.Fatalf("Failed to write certificate to temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		logger.Fatalf("Failed to close temp file: %v", err)
+	}
+
+	// Create the connection string with SSL configuration
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s sslrootcert=%s",
+		config.Host, 
+		config.Port, 
+		config.User, 
+		config.Password, 
+		config.DBName, 
+		config.SSLMode,
+		tmpFile.Name(),
+	)
+
+	// Initialize the database connection
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		DSN: dsn,
+		PreferSimpleProtocol: true,
+	}), &gorm.Config{})
+
 	if err != nil {
 		logger.Fatalf("Failed to connect to the database: %v", err)
 	}
 
-	logger.Info("Database connection established")
+	logger.Info("Database connection established with SSL")
 	return db
 }
 
@@ -70,6 +109,10 @@ func setupLogger() {
 
 // main is the entry point for the application
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+			log.Fatal("Error loading .env file")
+	}
 	// Setup logger
 	setupLogger()
 
@@ -80,7 +123,8 @@ func main() {
 	router := gin.Default()
 
 	// Swagger endpoint
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	//to test go to http://localhost:8080/docs/swagger/index.html
 
 	// Define API routes
 	api := router.Group("/api/v1")
@@ -102,7 +146,12 @@ func main() {
 	}
 }
 
-// Example handlers
+// @Summary Get all assets
+// @Description Fetches a list of all assets
+// @Tags assets
+// @Success 200 {object} map[string]string "List of assets"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /assets [get]
 func getAssets(c *gin.Context) {
 	logger.Info("Fetching all assets")
 	c.JSON(200, gin.H{"message": "List all assets"})

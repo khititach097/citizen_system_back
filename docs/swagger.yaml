@@ -5,5 +5,22 @@ info:
   description: API to manage assets and calculate taxes.
   title: Asset Tax API
   version: "1.0"
-paths: {}
+paths:
+  /assets:
+    get:
+      description: Fetches a list of all assets
+      responses:
+        "200":
+          description: List of assets
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get all assets
+      tags:
+      - assets
 swagger: "2.0"
