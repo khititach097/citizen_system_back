@@ -1,37 +1,181 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "API to manage assets and calculate taxes.",
-        "title": "Asset Tax API",
-        "contact": {},
-        "version": "1.0"
+        "contact": {}
     },
-    "host": "localhost:8080",
-    "basePath": "/api/v1",
     "paths": {
-        "/assets": {
+        "/api/v1/assets": {
             "get": {
-                "description": "Fetches a list of all assets",
+                "description": "Retrieve all assets in the system",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
                 "tags": [
                     "assets"
                 ],
-                "summary": "Get all assets",
+                "summary": "List all assets",
                 "responses": {
                     "200": {
-                        "description": "List of assets",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/asset_controllers.AssetsResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Failed to retrieve assets",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/asset_controllers.ErrorResponse"
                         }
                     }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "asset_controllers.AssetsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.AsLand"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "asset_controllers.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.AsLand": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "cutax_land_id": {
+                    "type": "string"
+                },
+                "deed_no": {
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "type": "string"
+                },
+                "deleted_by": {
+                    "type": "string"
+                },
+                "estimated_price": {
+                    "type": "number"
+                },
+                "estimated_price_by_treasury": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_estimated_by_treasury": {
+                    "type": "boolean"
+                },
+                "land_district_id": {
+                    "type": "integer"
+                },
+                "land_no": {
+                    "type": "string"
+                },
+                "land_space_ngan": {
+                    "type": "number"
+                },
+                "land_space_rai": {
+                    "type": "number"
+                },
+                "land_space_sub_wa": {
+                    "type": "number"
+                },
+                "land_space_wa": {
+                    "type": "number"
+                },
+                "land_sub_district_id": {
+                    "type": "integer"
+                },
+                "land_zone": {
+                    "type": "string"
+                },
+                "map_geometry": {
+                    "type": "string"
+                },
+                "map_lat": {
+                    "type": "string"
+                },
+                "map_long": {
+                    "type": "string"
+                },
+                "muni_code": {
+                    "type": "string"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "parcel_no": {
+                    "type": "string"
+                },
+                "parcel_type": {
+                    "type": "integer"
+                },
+                "road": {
+                    "type": "string"
+                },
+                "source_dt": {
+                    "type": "string"
+                },
+                "special_usetax_type": {
+                    "type": "string"
+                },
+                "survey_no": {
+                    "type": "string"
+                },
+                "sync_id": {
+                    "type": "string"
+                },
+                "tax_year": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "string"
+                },
+                "utm_map1": {
+                    "type": "string"
+                },
+                "utm_map2": {
+                    "type": "string"
+                },
+                "utm_map3": {
+                    "type": "string"
+                },
+                "utm_map4": {
+                    "type": "string"
+                },
+                "utm_scale": {
+                    "type": "string"
                 }
             }
         }
