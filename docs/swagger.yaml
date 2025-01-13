@@ -6,13 +6,24 @@ definitions:
           $ref: '#/definitions/models.AsLand'
         type: array
       message:
+        example: List all assets
         type: string
     type: object
   asset_controllers.ErrorResponse:
     properties:
       error:
+        example: Detailed error description
         type: string
       message:
+        example: Error message
+        type: string
+    type: object
+  asset_controllers.GetAssetResponse:
+    properties:
+      data:
+        $ref: '#/definitions/models.AsLand'
+      message:
+        example: Asset retrieved successfully
         type: string
     type: object
   models.AsLand:
@@ -101,7 +112,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: Retrieve all assets in the system
+      description: Get a list of all assets
       produces:
       - application/json
       responses:
@@ -110,10 +121,39 @@ paths:
           schema:
             $ref: '#/definitions/asset_controllers.AssetsResponse'
         "500":
-          description: Failed to retrieve assets
+          description: Internal Server Error
           schema:
             $ref: '#/definitions/asset_controllers.ErrorResponse'
       summary: List all assets
+      tags:
+      - assets
+  /api/v1/assets/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve an asset by its ID
+      parameters:
+      - description: Asset ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/asset_controllers.GetAssetResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/asset_controllers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/asset_controllers.ErrorResponse'
+      summary: Get asset by ID
       tags:
       - assets
 swagger: "2.0"

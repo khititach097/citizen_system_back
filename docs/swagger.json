@@ -6,7 +6,7 @@
     "paths": {
         "/api/v1/assets": {
             "get": {
-                "description": "Retrieve all assets in the system",
+                "description": "Get a list of all assets",
                 "consumes": [
                     "application/json"
                 ],
@@ -25,7 +25,51 @@
                         }
                     },
                     "500": {
-                        "description": "Failed to retrieve assets",
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/asset_controllers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/assets/{id}": {
+            "get": {
+                "description": "Retrieve an asset by its ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assets"
+                ],
+                "summary": "Get asset by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Asset ID (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/asset_controllers.GetAssetResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/asset_controllers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/asset_controllers.ErrorResponse"
                         }
@@ -45,7 +89,8 @@
                     }
                 },
                 "message": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "List all assets"
                 }
             }
         },
@@ -53,10 +98,24 @@
             "type": "object",
             "properties": {
                 "error": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Detailed error description"
                 },
                 "message": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Error message"
+                }
+            }
+        },
+        "asset_controllers.GetAssetResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/models.AsLand"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Asset retrieved successfully"
                 }
             }
         },

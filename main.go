@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
-	// ginSwagger "github.com/swaggo/gin-swagger"
-	// swaggerFiles "github.com/swaggo/files"
-	// _ "citizen_system_back/docs"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	swaggerFiles "github.com/swaggo/files"
+	_ "citizen_system_back/docs"
 )
 
 var logger = logrus.New()
@@ -38,8 +38,8 @@ func main() {
 	// Initialize Gin router
 	router := gin.Default()
 
-	// // Swagger endpoint
-	// router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// Swagger endpoint at /api/v1/docs
+	router.GET("/api/v1/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Register routes with db
 	routes.RegisterRoutes(router, db)
