@@ -1,10 +1,10 @@
 package asset_routes
 
 import (
+	"citizen_system_back/controllers/asset_controllers"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-
-	"citizen_system_back/controllers/asset_controllers"
 )
 
 // RegisterAssetRoutes registers routes for asset-related operations

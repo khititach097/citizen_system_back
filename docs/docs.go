@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/api/v1/assets": {
             "get": {
-                "description": "Get a list of all assets",
+                "description": "Get a list of all assets with optional filtering",
                 "consumes": [
                     "application/json"
                 ],
@@ -28,17 +28,37 @@ const docTemplate = `{
                     "assets"
                 ],
                 "summary": "List all assets",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number (default: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default: 10)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/asset_controllers.AssetsResponse"
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/asset_controllers.ErrorResponse"
+                            "$ref": "#/definitions/response.Response"
                         }
                     }
                 }
@@ -70,19 +90,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/asset_controllers.GetAssetResponse"
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/asset_controllers.ErrorResponse"
+                            "$ref": "#/definitions/response.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/asset_controllers.ErrorResponse"
+                            "$ref": "#/definitions/response.Response"
                         }
                     }
                 }
@@ -90,162 +116,20 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "asset_controllers.AssetsResponse": {
+        "response.Response": {
             "type": "object",
             "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.AsLand"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "List all assets"
-                }
-            }
-        },
-        "asset_controllers.ErrorResponse": {
-            "type": "object",
-            "properties": {
+                "data": {},
                 "error": {
                     "type": "string",
                     "example": "Detailed error description"
                 },
                 "message": {
                     "type": "string",
-                    "example": "Error message"
-                }
-            }
-        },
-        "asset_controllers.GetAssetResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "$ref": "#/definitions/models.AsLand"
+                    "example": "Operation successful"
                 },
-                "message": {
-                    "type": "string",
-                    "example": "Asset retrieved successfully"
-                }
-            }
-        },
-        "models.AsLand": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "created_by": {
-                    "type": "string"
-                },
-                "cutax_land_id": {
-                    "type": "string"
-                },
-                "deed_no": {
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "type": "string"
-                },
-                "deleted_by": {
-                    "type": "string"
-                },
-                "estimated_price": {
-                    "type": "number"
-                },
-                "estimated_price_by_treasury": {
-                    "type": "number"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "is_estimated_by_treasury": {
+                "success": {
                     "type": "boolean"
-                },
-                "land_district_id": {
-                    "type": "integer"
-                },
-                "land_no": {
-                    "type": "string"
-                },
-                "land_space_ngan": {
-                    "type": "number"
-                },
-                "land_space_rai": {
-                    "type": "number"
-                },
-                "land_space_sub_wa": {
-                    "type": "number"
-                },
-                "land_space_wa": {
-                    "type": "number"
-                },
-                "land_sub_district_id": {
-                    "type": "integer"
-                },
-                "land_zone": {
-                    "type": "string"
-                },
-                "map_geometry": {
-                    "type": "string"
-                },
-                "map_lat": {
-                    "type": "string"
-                },
-                "map_long": {
-                    "type": "string"
-                },
-                "muni_code": {
-                    "type": "string"
-                },
-                "note": {
-                    "type": "string"
-                },
-                "parcel_no": {
-                    "type": "string"
-                },
-                "parcel_type": {
-                    "type": "integer"
-                },
-                "road": {
-                    "type": "string"
-                },
-                "source_dt": {
-                    "type": "string"
-                },
-                "special_usetax_type": {
-                    "type": "string"
-                },
-                "survey_no": {
-                    "type": "string"
-                },
-                "sync_id": {
-                    "type": "string"
-                },
-                "tax_year": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "updated_by": {
-                    "type": "string"
-                },
-                "utm_map1": {
-                    "type": "string"
-                },
-                "utm_map2": {
-                    "type": "string"
-                },
-                "utm_map3": {
-                    "type": "string"
-                },
-                "utm_map4": {
-                    "type": "string"
-                },
-                "utm_scale": {
-                    "type": "string"
                 }
             }
         }
