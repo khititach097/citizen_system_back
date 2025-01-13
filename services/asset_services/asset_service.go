@@ -6,9 +6,8 @@ import (
 )
 
 // GetAllAssets retrieves all assets from the database
-func GetAllAssets(db *gorm.DB) ([]models.Asset, error) {
-	var assets []models.Asset
-	// Replace this with actual database fetch logic
-	err := db.Find(&assets).Error
+func GetAllAssets(db *gorm.DB) ([]models.AsLand, error) {
+	var assets []models.AsLand
+	err := db.Limit(10).Find(&assets).Error
 	return assets, err
 }
