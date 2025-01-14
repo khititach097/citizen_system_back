@@ -2,7 +2,7 @@ package main
 
 import (
 	"citizen_system_back/database"
-	"citizen_system_back/middleware"
+	// "citizen_system_back/middleware"
 	"citizen_system_back/routes"
 	"fmt"
 	"os"
@@ -53,11 +53,7 @@ func main() {
 	router.GET("/api/v1/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Register routes with db
-	authGroup.Use(middleware.AuthMiddleware)
-	{
-		// Register routes with db
-		routes.RegisterRoutes(authGroup, db)
-	}
+	routes.RegisterRoutes(router, db)
 
 	port := os.Getenv("PORT")
 	if port == "" {

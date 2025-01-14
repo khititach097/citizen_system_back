@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"encoding/json"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -28,53 +26,54 @@ type AuthResponse struct {
 func AuthMiddleware(c *gin.Context) {
 	// Extract the Authorization header
 	authHeader := c.GetHeader("Authorization")
+	fmt.Println("authHeader : ", authHeader)
 	if authHeader == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is missing"})
 		c.Abort()
 		return
 	}
 
-	// Send a request to the auth service
-	req, err := http.NewRequest("GET", "http://localhost:5005/auth", nil)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request to auth service"})
-		c.Abort()
-		return
-	}
+	// // Send a request to the auth service
+	// req, err := http.NewRequest("GET", "http://localhost:5005/auth", nil)
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request to auth service"})
+	// 	c.Abort()
+	// 	return
+	// }
 
-	// Add Authorization header to the request
-	req.Header.Set("Authorization", authHeader)
+	// // Add Authorization header to the request
+	// req.Header.Set("Authorization", authHeader)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to auth service"})
-		c.Abort()
-		return
-	}
-	defer resp.Body.Close()
+	// client := &http.Client{}
+	// resp, err := client.Do(req)
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to auth service"})
+	// 	c.Abort()
+	// 	return
+	// }
+	// defer resp.Body.Close()
 
-	// Read and parse the response
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from auth service"})
-		c.Abort()
-		return
-	}
+	// // Read and parse the response
+	// body, err := ioutil.ReadAll(resp.Body)
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from auth service"})
+	// 	c.Abort()
+	// 	return
+	// }
 
-	var authResponse AuthResponse
-	if err := json.Unmarshal(body, &authResponse); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse response from auth service"})
-		c.Abort()
-		return
-	}
+	// var authResponse AuthResponse
+	// if err := json.Unmarshal(body, &authResponse); err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse response from auth service"})
+	// 	c.Abort()
+	// 	return
+	// }
 
-	// Check if the user is authenticated
-	if !authResponse.Authenticated {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": authResponse.Message})
-		c.Abort()
-		return
-	}
+	// // Check if the user is authenticated
+	// if !authResponse.Authenticated {
+	// 	c.JSON(http.StatusUnauthorized, gin.H{"error": authResponse.Message})
+	// 	c.Abort()
+	// 	return
+	// }
 
 	// Proceed with the request
 	c.Next()
