@@ -24,6 +24,9 @@ func setupLogger() {
 	logger.SetLevel(logrus.InfoLevel)
 }
 
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
 	err := godotenv.Load()
 	if err != nil {
@@ -40,14 +43,6 @@ func main() {
 
 	// Initialize Gin router
 	router := gin.Default()
-
-	// Apply middleware globally
-	// router.Use(middleware.LoggingMiddleware) // Apply logging middleware
-
-	// api := router.Group("/api", middleware.LoggingMiddleware)
-	// {
-	// 	api.GET("/example", someHandler)
-	// }
 
 	// Swagger endpoint at /api/v1/docs
 	router.GET("/api/v1/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

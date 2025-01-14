@@ -9,6 +9,7 @@ import (
 )
 
 // RegisterRoutes registers all application routes.
+// @Security BearerAuth
 func RegisterRoutes(router *gin.Engine, db *gorm.DB) {
 	// Register Asset routes with the database passed as a dependency
 	assetGroup := router.Group("/api/v1")

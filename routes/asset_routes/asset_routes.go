@@ -9,6 +9,7 @@ import (
 )
 
 // RegisterAssetRoutes registers routes for asset-related operations
+// @Security BearerAuth
 func RegisterAssetRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	router.GET("/assets", asset_controllers.ListAssets(db))
 	// router.GET("/assets", middleware.AuthMiddleware, asset_controllers.ListAssets(db))

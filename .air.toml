@@ -1,0 +1,24 @@
+# .air.toml
+[build]
+  # Command to run before the application starts (to generate Swagger docs)
+  cmd = "swag init && go run main.go"
+
+  # List of file extensions to watch
+  include = ["go", "tmpl", "html", "md"]
+  
+  # List of files to exclude from watching
+  exclude = ["vendor"]
+
+  # Whether or not to run the build command on every change
+  run_on_change = true
+
+[logger]
+  time_format = "2006-01-02 15:04:05"
+  log_format = "color"
+  color = true
+
+[air]
+  # Enable watching of the files
+  watch = true
+  # The delay time after a file change is detected (in seconds)
+  delay = 1000

@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"net/http"
 
+	"citizen_system_back/utils/response"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"citizen_system_back/utils/response"
 )
 
 // @Summary List all assets
 // @Description Get a list of all assets with optional filtering
 // @Tags assets
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param page query int false "Page number (default: 1)"
@@ -55,6 +57,7 @@ func ListAssets(db *gorm.DB) gin.HandlerFunc {
 // @Summary Get asset by ID
 // @Description Retrieve an asset by its ID
 // @Tags assets
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path string true "Asset ID (UUID)"

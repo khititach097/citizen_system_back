@@ -33,6 +33,12 @@ func AuthMiddleware(c *gin.Context) {
 		return
 	}
 
+	// if authHeader == "" || !isValidToken(authHeader) {
+	// 	c.JSON(401, gin.H{"error": "Unauthorized"})
+	// 	c.Abort()
+	// 	return
+	// }
+
 	// // Send a request to the auth service
 	// req, err := http.NewRequest("GET", "http://localhost:5005/auth", nil)
 	// if err != nil {
@@ -77,4 +83,12 @@ func AuthMiddleware(c *gin.Context) {
 
 	// Proceed with the request
 	c.Next()
+}
+
+// isValidToken is a dummy function to check token validity, replace with real implementation
+func isValidToken(authHeader string) bool {
+	// Extract token from Authorization header (e.g., "Bearer <token>")
+	// In this example, we are just checking for a simple placeholder token for demonstration
+	token := authHeader[len("Bearer "):]
+	return token == "your-valid-token" // Replace with your token validation logic
 }

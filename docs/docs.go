@@ -17,6 +17,11 @@ const docTemplate = `{
     "paths": {
         "/api/v1/assets": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Get a list of all assets with optional filtering",
                 "consumes": [
                     "application/json"
@@ -66,6 +71,11 @@ const docTemplate = `{
         },
         "/api/v1/assets/{id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Retrieve an asset by its ID",
                 "consumes": [
                     "application/json"
@@ -132,6 +142,13 @@ const docTemplate = `{
                     "type": "boolean"
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }`
