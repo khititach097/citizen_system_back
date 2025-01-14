@@ -33,19 +33,19 @@ func AuthMiddleware(c *gin.Context) {
 		return
 	}
 
-	// if authHeader == "" || !isValidToken(authHeader) {
-	// 	c.JSON(401, gin.H{"error": "Unauthorized"})
-	// 	c.Abort()
-	// 	return
-	// }
+	if authHeader == "" || !isValidToken(authHeader) {
+		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
 
-	// // Send a request to the auth service
-	// req, err := http.NewRequest("GET", "http://localhost:5005/auth", nil)
-	// if err != nil {
-	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request to auth service"})
-	// 	c.Abort()
-	// 	return
-	// }
+	// Send a request to the auth service
+	_, err := http.NewRequest("GET", "http://localhost:5005/auth", nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request to auth service"})
+		c.Abort()
+		return
+	}
 
 	// // Add Authorization header to the request
 	// req.Header.Set("Authorization", authHeader)

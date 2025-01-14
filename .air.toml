@@ -22,3 +22,6 @@
   watch = true
   # The delay time after a file change is detected (in seconds)
   delay = 1000
+
+[air]
+  kill_signal = "SIGTERM" 
