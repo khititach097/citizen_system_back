@@ -83,6 +83,39 @@ paths:
       summary: Get asset by ID
       tags:
       - assets
+  /api/v1/dev_tools/gen_model/{table_name}:
+    get:
+      consumes:
+      - application/json
+      description: Generate model
+      parameters:
+      - description: The name of the table to generate model for
+        in: path
+        name: table_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Generate model
+      tags:
+      - dev_tools
 securityDefinitions:
   BearerAuth:
     in: header
