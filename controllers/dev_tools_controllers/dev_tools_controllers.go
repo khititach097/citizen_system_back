@@ -18,7 +18,7 @@ import (
 // @Summary Generate model
 // @Description Generate model
 // @Tags dev_tools
-// //@Security BearerAuth
+// //@Security CookieAuth
 // @Accept json
 // @Produce json
 // @Param table_name path string true "The name of the table to generate model for"  // Add description here
@@ -39,11 +39,11 @@ func GenModel(db *gorm.DB) gin.HandlerFunc {
 		// Check if the domain does not include "localhost"
 		if !strings.Contains(domain, "localhost") {
 			c.JSON(http.StatusForbidden, gin.H{
-					"error": "Access not allowed from this domain",
+				"error": "Access not allowed from this domain",
 			})
 			return
 		}
-		
+
 		if table_name == "" {
 			c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid table name", errors.New("table name cannot be empty")))
 			return

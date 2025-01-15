@@ -1,8 +1,8 @@
 package middleware
 
 import (
+	"citizen_system_back/utils/bedrock_auth"
 	"fmt"
-	"os"
 	"time"
 
 	"net/http"
@@ -27,47 +27,93 @@ type AuthResponse struct {
 func AuthMiddleware(c *gin.Context) {
 	// Extract the Authorization header
 	authHeader := c.GetHeader("Authorization")
-	fmt.Println("authHeader : ", authHeader)
 	if authHeader == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is missing"})
 		c.Abort()
 		return
 	}
 
-	fmt.Println("auth authHeader : ", authHeader)
-	if authHeader == "" || !isValidToken(authHeader) {
-		c.JSON(401, gin.H{"error": "Unauthorized", "message": "token not format Bearer"})
-		c.Abort()
-		return
-	}
-
-	url := os.Getenv("AUTH_HOST") + "/api/v3/oauth/user?client_id=" + os.Getenv("AUTH_CLIENT_ID") + "&client_secret=" + os.Getenv("AUTH_CLIENT_SECRET")
-	fmt.Println("auth url : ", url)
-	req, err := http.NewRequest("POST", url, nil)
+	// Attempt to get profile using the provided Authorization header
+	result, err := bedrock_auth.GetProfile(authHeader)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request to auth service"})
 		c.Abort()
 		return
 	}
 
-	// Add Authorization header to the request
-	req.Header.Set("Authorization", authHeader)
-	fmt.Println("auth req : ", req)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to auth service"})
-		c.Abort()
+	// Safely extract the 'data' field from the response
+	jsonResult, ok := result.(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Missing or invalid 'data' field in response"})
 		return
 	}
-	defer resp.Body.Close()
 
-	// Handle the response
-	if resp.StatusCode != http.StatusOK {
-		c.JSON(resp.StatusCode, gin.H{"error": "Failed to authenticate with auth service"})
-		return
-	}
+	// Log extracted data for debugging
+	fmt.Println(" ****** result : ", jsonResult["data"])
+
+	// url := os.Getenv("AUTH_HOST") + "/api/v1/ums/profile?client_id=" + os.Getenv("AUTH_CLIENT_ID") + "&user_type=officer" + "&client_secret=" + os.Getenv("AUTH_CLIENT_SECRET")
+	// fmt.Println("**************** auth url : ", url)
+	// req, err := http.NewRequest("GET", url, nil)
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request to auth service"})
+	// 	c.Abort()
+	// 	return
+	// }
+
+	// // Add Authorization header to the request
+	// req.Header.Set("Cookie", authHeader)
+	// fmt.Println("**************** auth req : ", req)
+
+	// client := &http.Client{}
+	// resp, err := client.Do(req)
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to auth service"})
+	// 	c.Abort()
+	// 	return
+	// }
+	// defer resp.Body.Close()
+
+	// fmt.Println("**************** auth resp : ", resp)
+
+	// // Read the response body
+	// body, err := io.ReadAll(resp.Body)
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response from auth service"})
+	// 	c.Abort()
+	// 	return
+	// }
+
+	// // Log the response body
+	// fmt.Println("**************** auth service response body:", string(body))
+
+	// // Unmarshal the JSON into the struct
+	// var authResponse AuthResponse
+	// if err := json.Unmarshal(body, &authResponse); err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse JSON response from auth service"})
+	// 	c.Abort()
+	// 	return
+	// }
+
+	// // Parse the JSON response
+	// var jsonResp map[string]interface{}
+	// err = json.Unmarshal(body, &jsonResp)
+	// if err != nil {
+	// 	fmt.Println("Failed to parse JSON:", err)
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse JSON from auth service"})
+	// 	c.Abort()
+	// 	return
+	// }
+
+	// fmt.Printf("**************** auth parsed resp: %+v\n", jsonResp)
+
+	// // Log the parsed response
+	// fmt.Printf("Parsed response: %+v\n", authResponse)
+
+	// // Handle the response
+	// if resp.StatusCode != http.StatusOK {
+	// 	c.JSON(resp.StatusCode, gin.H{"error": "Failed to authenticate with auth service"})
+	// 	return
+	// }
 
 	// // Read and parse the response
 	// body, err := ioutil.ReadAll(resp.Body)
@@ -96,11 +142,11 @@ func AuthMiddleware(c *gin.Context) {
 }
 
 // isValidToken is a dummy function to check token validity, replace with real implementation
-func isValidToken(authHeader string) bool {
-	// Extract token from Authorization header (e.g., "Bearer <token>")
-	// In this example, we are just checking for a simple placeholder token for demonstration
-	fmt.Println("auth isValidToken authHeader : ", authHeader)
-	token := authHeader[len("Bearer "):]
-	fmt.Println("auth isValidToken token : ", token)
-	return token != "" // Replace with your token validation logic
-}
+// func isValidToken(authHeader string) bool {
+// 	// Extract token from Authorization header (e.g., "Bearer <token>")
+// 	// In this example, we are just checking for a simple placeholder token for demonstration
+// 	fmt.Println("auth isValidToken authHeader : ", authHeader)
+// 	token := authHeader[len("Bearer "):]
+// 	fmt.Println("auth isValidToken token : ", token)
+// 	return token != "" // Replace with your token validation logic
+// }

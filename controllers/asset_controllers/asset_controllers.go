@@ -15,7 +15,7 @@ import (
 // @Summary List all assets
 // @Description Get a list of all assets with optional filtering
 // @Tags assets
-// @Security BearerAuth
+// @Security CookieAuth
 // @Accept json
 // @Produce json
 // @Param page query int false "Page number (default: 1)"
@@ -57,7 +57,7 @@ func ListAssets(db *gorm.DB) gin.HandlerFunc {
 // @Summary Get asset by ID
 // @Description Retrieve an asset by its ID
 // @Tags assets
-// @Security BearerAuth
+// @Security CookieAuth
 // @Accept json
 // @Produce json
 // @Param id path string true "Asset ID (UUID)"

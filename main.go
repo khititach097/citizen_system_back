@@ -24,9 +24,9 @@ func setupLogger() {
 	logger.SetLevel(logrus.InfoLevel)
 }
 
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
+// @securityDefinitions.apikey CookieAuth
+// @name Cookie
+// @in cookie
 func main() {
 	err := godotenv.Load()
 	if err != nil {
