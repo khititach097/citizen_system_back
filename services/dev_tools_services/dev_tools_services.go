@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 	"strings"
 	"path/filepath"
+	"sort"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -55,6 +56,23 @@ func GenModel(db *gorm.DB, tableName string) string {
 		return fmt.Sprintf("Error querying database: %v", err)
 	}
 
+		// Track required imports
+		imports := make(map[string]bool)
+		imports["github.com/google/uuid"] = false // Initialize as not needed
+
+	// Check which imports are needed
+	for _, col := range columns {
+		switch {
+		case col.DataType == "uuid" || col.ColumnName == "id":
+			imports["github.com/google/uuid"] = true
+		case strings.Contains(col.DataType, "timestamp") || 
+			 col.ColumnName == "created_at" || 
+			 col.ColumnName == "updated_at" || 
+			 col.ColumnName == "deleted_at":
+			imports["time"] = true
+		}
+	}
+
 	// Create directory and file handling
 	modelDir := "models"
 	if err := os.MkdirAll(modelDir, os.ModePerm); err != nil {
@@ -70,17 +88,27 @@ func GenModel(db *gorm.DB, tableName string) string {
 	}
 	defer file.Close()
 
-	// Generate model content
-	modelContent := fmt.Sprintf(`package models
+	// Generate imports section
+	modelContent := "package models\n\n"
+	if len(imports) > 0 {
+		modelContent += "import (\n"
+		// Sort imports for consistency
+		sortedImports := make([]string, 0, len(imports))
+		for imp, needed := range imports {
+			if needed {
+				sortedImports = append(sortedImports, imp)
+			}
+		}
+		sort.Strings(sortedImports)
+		for _, imp := range sortedImports {
+			modelContent += fmt.Sprintf("\t%q\n", imp)
+		}
+		modelContent += ")\n\n"
+	}
 
-import (
-	"github.com/google/uuid"
-	"time"
-)
-
-// %s represents the structure of the %s table
-type %s struct {
-`, modelName, tableName, modelName)
+	// Generate struct definition
+	modelContent += fmt.Sprintf("// %s represents the structure of the %s table\n", modelName, tableName)
+	modelContent += fmt.Sprintf("type %s struct {\n", modelName)
 
 	// Track seen fields to avoid duplicates
 	seenFields := make(map[string]bool)
@@ -88,7 +116,7 @@ type %s struct {
 	// Generate struct fields
 	for _, col := range columns {
 		if seenFields[col.ColumnName] {
-			continue // Skip duplicate fields
+			continue
 		}
 		seenFields[col.ColumnName] = true
 

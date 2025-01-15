@@ -33,15 +33,6 @@ func setupLogger() {
 func InitDB() (*gorm.DB, error) {
 	setupLogger()
 
-	// config := Config{
-	// 	Host:     "bedrock-dev-db.cluster-cq6wq7ckjmhj.ap-southeast-1.rds.amazonaws.com",
-	// 	Port:     "5432",
-	// 	User:     "sts_dev_app",
-	// 	Password: "9{Ll&&6{!Cm4d5M#",
-	// 	DBName:   "sts_dev",
-	// 	SSLMode:  "verify-full",
-	// 	SSLCert:  os.Getenv("DATABASE_SSL_CERT"),
-	// }
 	config := Config{
 		Host:     os.Getenv("DATABASE_HOST"),
 		Port:     os.Getenv("DATABASE_PORT"),
