@@ -125,7 +125,11 @@ func GenModel(db *gorm.DB, tableName string) string {
 		modelContent += fmt.Sprintf("\t%s %s `%s`\n", fieldName, fieldType, gormTag)
 	}
 
-	modelContent += "}\n"
+	modelContent += "}\n\n"
+
+	modelContent += fmt.Sprintf("func (%s) TableName() string {\n", modelName)
+	modelContent += fmt.Sprintf("  return \"%s\"\n", tableName) 
+	modelContent += "}"
 
 	// Write to file
 	if _, err := file.WriteString(modelContent); err != nil {

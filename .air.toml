@@ -1,7 +1,9 @@
 # .air.toml
 [build]
   # Command to run before the application starts (to generate Swagger docs)
-  cmd = "swag init && go run main.go"
+  cmd = "swag init 2>&1 && go run main.go 2>&1 || echo 'Build failed: check Swagger or Go errors'"
+  #cmd = "swag init && go run main.go || echo 'Build failed: check Swagger or Go errors'"
+
 
   # List of file extensions to watch
   include = ["go", "tmpl", "html", "md"]
@@ -24,4 +26,6 @@
   delay = 1000
 
 [air]
-  kill_signal = "SIGTERM" 
+  watch = true
+  delay = 1000
+  kill_signal = "SIGTERM"

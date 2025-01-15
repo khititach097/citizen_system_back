@@ -32,3 +32,11 @@ func GetAssetByID(db *gorm.DB, id string) (*models.AsLands, error) {
 	}
 	return &asset, nil
 }
+
+func GetAssetByUserID(db *gorm.DB, user_id string) (*[]models.Citizen, error) {
+	var citizen []models.Citizen
+	if err := db.Where("citizen_id = ?", user_id).Find(&citizen).Error; err != nil {
+		return nil, err
+	}
+	return &citizen, nil
+}
