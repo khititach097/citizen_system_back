@@ -1,3 +1,4 @@
+// database/db.go
 package database
 
 import (
@@ -5,10 +6,17 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+)
+
+var (
+	db     *gorm.DB
+	once   sync.Once
+	logger = logrus.New()
 )
 
 type Config struct {
@@ -21,61 +29,81 @@ type Config struct {
 	SSLCert  string
 }
 
-var logger = logrus.New()
-
 func setupLogger() {
 	logger.SetFormatter(&logrus.JSONFormatter{})
 	logger.SetOutput(os.Stdout)
 	logger.SetLevel(logrus.InfoLevel)
 }
 
-// InitDB initializes and returns a database connection
-func InitDB() (*gorm.DB, error) {
-	setupLogger()
+// GetDB returns the global database instance
+func GetDB() *gorm.DB {
+	return db
+}
 
-	config := Config{
-		Host:     os.Getenv("DATABASE_HOST"),
-		Port:     os.Getenv("DATABASE_PORT"),
-		User:     os.Getenv("DATABASE_USERNAME"),
-		Password: os.Getenv("DATABASE_PASSWORD"),
-		DBName:   os.Getenv("DATABASE_NAME"),
-		SSLMode:  "verify-full",
-		SSLCert:  os.Getenv("DATABASE_SSL_CERT"),
-	}
+// InitDB initializes the database connection
+func InitDB() error {
+	var initError error
 
-	// Create temporary file for SSL certificate
-	tmpFile, err := ioutil.TempFile("", "postgres-cert-*.pem")
-	if err != nil {
-		logger.Fatalf("Failed to create temporary file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
+	once.Do(func() {
+		setupLogger()
 
-	certBytes, err := base64.StdEncoding.DecodeString(config.SSLCert)
-	if err != nil {
-		logger.Fatalf("Failed to decode SSL certificate: %v", err)
-	}
-	if _, err := tmpFile.Write(certBytes); err != nil {
-		logger.Fatalf("Failed to write certificate to temp file: %v", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		logger.Fatalf("Failed to close temp file: %v", err)
-	}
+		config := Config{
+			Host:     os.Getenv("DATABASE_HOST"),
+			Port:     os.Getenv("DATABASE_PORT"),
+			User:     os.Getenv("DATABASE_USERNAME"),
+			Password: os.Getenv("DATABASE_PASSWORD"),
+			DBName:   os.Getenv("DATABASE_NAME"),
+			SSLMode:  "verify-full",
+			SSLCert:  os.Getenv("DATABASE_SSL_CERT"),
+		}
 
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s sslrootcert=%s",
-		config.Host,
-		config.Port,
-		config.User,
-		config.Password,
-		config.DBName,
-		config.SSLMode,
-		tmpFile.Name(),
-	)
+		// Create temporary file for SSL certificate
+		tmpFile, err := ioutil.TempFile("", "postgres-cert-*.pem")
+		if err != nil {
+			initError = fmt.Errorf("failed to create temporary file: %w", err)
+			logger.Error(initError)
+			return
+		}
+		defer os.Remove(tmpFile.Name())
 
-	db, err := gorm.Open(postgres.New(postgres.Config{DSN: dsn}), &gorm.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to the database: %w", err)
-	}
+		certBytes, err := base64.StdEncoding.DecodeString(config.SSLCert)
+		if err != nil {
+			initError = fmt.Errorf("failed to decode SSL certificate: %w", err)
+			logger.Error(initError)
+			return
+		}
 
-	logger.Info("Database connection established with SSL")
-	return db, nil
+		if _, err := tmpFile.Write(certBytes); err != nil {
+			initError = fmt.Errorf("failed to write certificate to temp file: %w", err)
+			logger.Error(initError)
+			return
+		}
+
+		if err := tmpFile.Close(); err != nil {
+			initError = fmt.Errorf("failed to close temp file: %w", err)
+			logger.Error(initError)
+			return
+		}
+
+		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s sslrootcert=%s",
+			config.Host,
+			config.Port,
+			config.User,
+			config.Password,
+			config.DBName,
+			config.SSLMode,
+			tmpFile.Name(),
+		)
+
+		db, err = gorm.Open(postgres.New(postgres.Config{DSN: dsn}), &gorm.Config{})
+		if err != nil {
+			initError = fmt.Errorf("failed to connect to the database: %w", err)
+			logger.Error(initError)
+			return
+		}
+
+		logger.Info("Database connection established with SSL")
+	})
+
+	return initError
 }

@@ -28,15 +28,15 @@ func setupLogger() {
 // @name Cookie
 // @in cookie
 func main() {
-	err := godotenv.Load()
-	if err != nil {
+	envErr := godotenv.Load()
+	if envErr != nil {
 		logger.Fatal("Error loading .env file")
 	}
 
 	setupLogger()
 
 	// Initialize database
-	db, err := database.InitDB()
+	err := database.InitDB()
 	if err != nil {
 		logger.Fatalf("Database initialization failed: %v", err)
 	}
@@ -48,7 +48,7 @@ func main() {
 	router.GET("/api/v1/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Register routes with db
-	routes.RegisterRoutes(router, db)
+	routes.RegisterRoutes(router)
 
 	port := os.Getenv("PORT")
 	if port == "" {

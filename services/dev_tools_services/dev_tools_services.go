@@ -1,12 +1,12 @@
 package dev_tools_services
 
 import (
+	"citizen_system_back/database"
 	"fmt"
 	"os"
-	"gorm.io/gorm"
-	"strings"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -20,7 +20,8 @@ type Column struct {
 	IsPrimary  bool
 }
 
-func GenModel(db *gorm.DB, tableName string) string {
+func GenModel(tableName string) string {
+	var db = database.GetDB()
 	// Step 1: Check if the table exists
 	var tableExists bool
 	err := db.Raw(fmt.Sprintf("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = '%s')", tableName)).Scan(&tableExists).Error
@@ -56,19 +57,19 @@ func GenModel(db *gorm.DB, tableName string) string {
 		return fmt.Sprintf("Error querying database: %v", err)
 	}
 
-		// Track required imports
-		imports := make(map[string]bool)
-		imports["github.com/google/uuid"] = false // Initialize as not needed
+	// Track required imports
+	imports := make(map[string]bool)
+	imports["github.com/google/uuid"] = false // Initialize as not needed
 
 	// Check which imports are needed
 	for _, col := range columns {
 		switch {
 		case col.DataType == "uuid" || col.ColumnName == "id":
 			imports["github.com/google/uuid"] = true
-		case strings.Contains(col.DataType, "timestamp") || 
-			 col.ColumnName == "created_at" || 
-			 col.ColumnName == "updated_at" || 
-			 col.ColumnName == "deleted_at":
+		case strings.Contains(col.DataType, "timestamp") ||
+			col.ColumnName == "created_at" ||
+			col.ColumnName == "updated_at" ||
+			col.ColumnName == "deleted_at":
 			imports["time"] = true
 		}
 	}
@@ -128,7 +129,7 @@ func GenModel(db *gorm.DB, tableName string) string {
 	modelContent += "}\n\n"
 
 	modelContent += fmt.Sprintf("func (%s) TableName() string {\n", modelName)
-	modelContent += fmt.Sprintf("  return \"%s\"\n", tableName) 
+	modelContent += fmt.Sprintf("  return \"%s\"\n", tableName)
 	modelContent += "}"
 
 	// Write to file
@@ -146,18 +147,18 @@ func getFieldTypeAndTag(col Column) (string, string) {
 	switch {
 	case col.ColumnName == "id":
 		return "uuid.UUID", `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	
+
 	case col.ColumnName == "created_at" || col.ColumnName == "updated_at" || col.ColumnName == "deleted_at":
 		if col.IsNullable == "YES" {
 			return "*time.Time", fmt.Sprintf(`gorm:"column:%s" json:"%s,omitempty"`, col.ColumnName, col.ColumnName)
 		}
 		return "time.Time", fmt.Sprintf(`gorm:"column:%s" json:"%s"`, col.ColumnName, col.ColumnName)
-	
+
 	case col.DataType == "geometry" || col.DataType == "public.geometry":
 		fieldType = "interface{}"
 		gormTag = fmt.Sprintf(`gorm:"column:%s;type:geometry" json:"%s"`, col.ColumnName, col.ColumnName)
 		return fieldType, gormTag
-	
+
 	default:
 		baseType := mapDataTypeToGo(col.DataType)
 		if col.IsNullable == "YES" && !strings.HasPrefix(baseType, "*") {

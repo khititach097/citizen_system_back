@@ -18,13 +18,11 @@ import (
 // @Security CookieAuth
 // @Accept json
 // @Produce json
-// @Param page query int false "Page number (default: 1)"
-// @Param limit query int false "Items per page (default: 10)"
 // @Success 200 {object} response.Response
 // @Failure 400 {object} response.Response
 // @Failure 500 {object} response.Response
 // @Router /api/v1/assets [get]
-func ListAssets(db *gorm.DB) gin.HandlerFunc {
+func ListAssets() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Parse pagination parameters
 		page := 1
@@ -42,7 +40,7 @@ func ListAssets(db *gorm.DB) gin.HandlerFunc {
 			}
 		}
 
-		assets, err := asset_services.GetAllAssets(db)
+		assets, err := asset_services.GetAllAssets()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to retrieve assets", err))
 			return
@@ -66,7 +64,7 @@ func ListAssets(db *gorm.DB) gin.HandlerFunc {
 // @Failure 404 {object} response.Response
 // @Failure 500 {object} response.Response
 // @Router /api/v1/assets/{id} [get]
-func GetAssetByID(db *gorm.DB) gin.HandlerFunc {
+func GetAssetByID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 		if id == "" {
@@ -74,7 +72,7 @@ func GetAssetByID(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		asset, err := asset_services.GetAssetByID(db, id)
+		asset, err := asset_services.GetAssetByID(id)
 		if err != nil {
 			switch {
 			case errors.Is(err, gorm.ErrRecordNotFound):
@@ -100,15 +98,18 @@ func GetAssetByID(db *gorm.DB) gin.HandlerFunc {
 // @Failure 400 {object} response.Response
 // @Failure 500 {object} response.Response
 // @Router /api/v1/assets/get_asset_by_user_id/{user_id} [get]
-func GetAssetByUserID(db *gorm.DB) gin.HandlerFunc {
+func GetAssetByUserID() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user_id := c.Param("user_id")
-		if user_id == "" {
+		userId := c.Param("user_id")
+		parcelType := c.Query("parcel_type") // Gets ?parcel_type=value
+		muniCode := c.Query("muni_code")     // Gets ?muni_code=value
+		//get query name parcel_type and muni_code
+		if userId == "" {
 			c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid user_id", errors.New("user_id cannot be empty")))
 			return
 		}
 
-		asset, err := asset_services.GetAssetByUserID(db, user_id)
+		asset, err := asset_services.GetAssetByUserID(userId, parcelType, muniCode)
 		if err != nil {
 			switch {
 			case errors.Is(err, gorm.ErrRecordNotFound):
