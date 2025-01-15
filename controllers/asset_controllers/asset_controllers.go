@@ -80,6 +80,40 @@ func GetAssetByID(db *gorm.DB) gin.HandlerFunc {
 			case errors.Is(err, gorm.ErrRecordNotFound):
 				c.JSON(http.StatusNotFound, response.NewErrorResponse("Asset not found", err))
 			default:
+				c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to retrieve assets", err))
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, response.NewResponse("Asset retrieved successfully", asset))
+	}
+}
+
+// @Summary Get all asset
+// @Description Get all asset with user id
+// @Tags assets
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param user_id path string true "User ID (UUID)"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /api/v1/assets/get_asset_by_user_id/{user_id} [get]
+func GetAssetByUserID(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user_id := c.Param("user_id")
+		if user_id == "" {
+			c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid user_id", errors.New("user_id cannot be empty")))
+			return
+		}
+
+		asset, err := asset_services.GetAssetByUserID(db, user_id)
+		if err != nil {
+			switch {
+			case errors.Is(err, gorm.ErrRecordNotFound):
+				c.JSON(http.StatusNotFound, response.NewErrorResponse("Asset not found", err))
+			default:
 				c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to retrieve asset", err))
 			}
 			return
