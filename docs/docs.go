@@ -19,7 +19,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "CookieAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Get a list of all assets with optional filtering",
@@ -108,7 +108,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "CookieAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Retrieve an asset by its ID",
@@ -230,22 +230,22 @@ const docTemplate = `{
         }
     },
     "securityDefinitions": {
-        "CookieAuth": {
+        "BearerAuth": {
             "type": "apiKey",
-            "name": "Cookie",
-            "in": "cookie"
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "",
+	Version:          "1.0",
 	Host:             "",
 	BasePath:         "",
 	Schemes:          []string{},
-	Title:            "",
-	Description:      "",
+	Title:            "Swagger Citizen System API",
+	Description:      "This is a sample server celler server.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -7,7 +7,8 @@ import (
 )
 
 // RegisterAssetRoutes registers routes for asset-related operations
-// @Security CookieAuth
+// @Security BearerAuth
+// // @Security CookieAuth
 func RegisterAssetRoutes(router *gin.RouterGroup) {
 	router.GET("/assets", asset_controllers.ListAssets())
 	// router.GET("/assets", middleware.AuthMiddleware, asset_controllers.ListAssets())

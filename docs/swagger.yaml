@@ -13,6 +13,9 @@ definitions:
     type: object
 info:
   contact: {}
+  description: This is a sample server celler server.
+  title: Swagger Citizen System API
+  version: "1.0"
 paths:
   /api/v1/assets:
     get:
@@ -35,7 +38,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - CookieAuth: []
+      - BearerAuth: []
       summary: List all assets
       tags:
       - assets
@@ -70,7 +73,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - CookieAuth: []
+      - BearerAuth: []
       summary: Get asset by ID
       tags:
       - assets
@@ -139,8 +142,8 @@ paths:
       tags:
       - dev_tools
 securityDefinitions:
-  CookieAuth:
-    in: cookie
-    name: Cookie
+  BearerAuth:
+    in: header
+    name: Authorization
     type: apiKey
 swagger: "2.0"

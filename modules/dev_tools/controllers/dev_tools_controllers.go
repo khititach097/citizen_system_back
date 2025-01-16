@@ -17,7 +17,7 @@ import (
 // @Summary Generate model
 // @Description Generate model
 // @Tags dev_tools
-// //@Security CookieAuth
+// // @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param table_name path string true "The name of the table to generate model for"  // Add description here

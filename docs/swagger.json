@@ -1,14 +1,17 @@
 {
     "swagger": "2.0",
     "info": {
-        "contact": {}
+        "description": "This is a sample server celler server.",
+        "title": "Swagger Citizen System API",
+        "contact": {},
+        "version": "1.0"
     },
     "paths": {
         "/api/v1/assets": {
             "get": {
                 "security": [
                     {
-                        "CookieAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Get a list of all assets with optional filtering",
@@ -97,7 +100,7 @@
             "get": {
                 "security": [
                     {
-                        "CookieAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Retrieve an asset by its ID",
@@ -219,10 +222,10 @@
         }
     },
     "securityDefinitions": {
-        "CookieAuth": {
+        "BearerAuth": {
             "type": "apiKey",
-            "name": "Cookie",
-            "in": "cookie"
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }

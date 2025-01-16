@@ -25,9 +25,13 @@ func setupLogger() {
 	logger.SetLevel(logrus.InfoLevel)
 }
 
-// @securityDefinitions.apikey CookieAuth
-// @name Cookie
-// @in cookie
+// @title           Swagger Citizen System API
+// @version         1.0
+// @description     This is a sample server celler server.
+
+// @securityDefinitions.apikey BearerAuth
+// @name Authorization
+// @in header
 func main() {
 	envErr := godotenv.Load()
 	if envErr != nil {

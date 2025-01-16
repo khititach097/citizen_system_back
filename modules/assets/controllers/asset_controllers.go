@@ -16,7 +16,7 @@ import (
 // @Summary List all assets
 // @Description Get a list of all assets with optional filtering
 // @Tags assets
-// @Security CookieAuth
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Success 200 {object} response.Response
@@ -25,6 +25,15 @@ import (
 // @Router /api/v1/assets [get]
 func ListAssets() gin.HandlerFunc {
 	return func(c *gin.Context) {
+
+		// profile, exists := c.Get("profile")
+		// if !exists {
+		// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Profile information is missing"})
+		// 	return
+		// }
+		// // Use the profile information
+		// fmt.Println("Profile from middleware:", profile)
+
 		// Parse pagination parameters
 		page := 1
 		limit := 10
@@ -56,7 +65,7 @@ func ListAssets() gin.HandlerFunc {
 // @Summary Get asset by ID
 // @Description Retrieve an asset by its ID
 // @Tags assets
-// @Security CookieAuth
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path string true "Asset ID (UUID)"
