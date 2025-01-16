@@ -1,7 +1,7 @@
 package dev_tools_routes
 
 import (
-	"citizen_system_back/controllers/dev_tools_controllers"
+	dev_tools_controllers "citizen_system_back/modules/dev_tools/controllers"
 
 	"github.com/gin-gonic/gin"
 )

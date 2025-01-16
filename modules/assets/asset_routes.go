@@ -1,8 +1,7 @@
 package asset_routes
 
 import (
-	"citizen_system_back/controllers/asset_controllers"
-	// "citizen_system_back/middleware"
+	asset_controllers "citizen_system_back/modules/assets/controllers"
 
 	"github.com/gin-gonic/gin"
 )

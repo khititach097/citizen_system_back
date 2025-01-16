@@ -19,15 +19,6 @@ paths:
       consumes:
       - application/json
       description: Get a list of all assets with optional filtering
-      parameters:
-      - description: 'Page number (default: 1)'
-        in: query
-        name: page
-        type: integer
-      - description: 'Items per page (default: 10)'
-        in: query
-        name: limit
-        type: integer
       produces:
       - application/json
       responses:
@@ -44,7 +35,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - CookieAuth: []
       summary: List all assets
       tags:
       - assets
@@ -79,7 +70,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - CookieAuth: []
       summary: Get asset by ID
       tags:
       - assets
@@ -148,8 +139,8 @@ paths:
       tags:
       - dev_tools
 securityDefinitions:
-  BearerAuth:
-    in: header
-    name: Authorization
+  CookieAuth:
+    in: cookie
+    name: Cookie
     type: apiKey
 swagger: "2.0"

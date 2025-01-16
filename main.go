@@ -2,8 +2,9 @@ package main
 
 import (
 	"citizen_system_back/database"
+	routes "citizen_system_back/modules"
+
 	// "citizen_system_back/middleware"
-	"citizen_system_back/routes"
 	"fmt"
 	"os"
 

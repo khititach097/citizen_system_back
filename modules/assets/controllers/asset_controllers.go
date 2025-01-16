@@ -1,12 +1,12 @@
 package asset_controllers
 
 import (
-	"citizen_system_back/services/asset_services"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 
+	asset_services "citizen_system_back/modules/assets/services"
 	"citizen_system_back/utils/response"
 
 	"github.com/gin-gonic/gin"

@@ -81,7 +81,7 @@ func GenModel(tableName string) string {
 	}
 
 	modelName := toPascalCase(tableName)
-	fileName := filepath.Join(modelDir, fmt.Sprintf("%s.go", tableName))
+	fileName := filepath.Join(modelDir, fmt.Sprintf("%s_model.go", tableName))
 
 	file, err := os.Create(fileName)
 	if err != nil {

@@ -1,7 +1,6 @@
 package dev_tools_controllers
 
 import (
-	"citizen_system_back/services/dev_tools_services"
 	"fmt"
 	"strings"
 
@@ -9,6 +8,7 @@ import (
 	// "fmt"
 	"net/http"
 
+	dev_tools_services "citizen_system_back/modules/dev_tools/services"
 	"citizen_system_back/utils/response"
 
 	"github.com/gin-gonic/gin"
