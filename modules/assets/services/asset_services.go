@@ -280,7 +280,7 @@ func getLandDetails(landID string, muniCode string) (interface{}, error) {
 		LEFT JOIN property_building_main_type pbmt ON ab.property_building_main_type_id = pbmt.building_type_id
 		WHERE land_id = ? AND pbmt.muni_code = ?`
 
-	var buildings []map[string]interface{}
+	var buildings []map[string]interface{} = []map[string]interface{}{}
 	if err := db.Raw(buildingsSQL, landID, muniCode).Scan(&buildings).Error; err != nil {
 		return nil, fmt.Errorf("error getting buildings: %w", err)
 	}
@@ -301,7 +301,7 @@ func getLandDetails(landID string, muniCode string) (interface{}, error) {
 			LEFT JOIN property_using_type put ON abu.building_using_type_id = put.using_type_id
 			WHERE building_id = ?`
 
-		var buildingUsed []map[string]interface{}
+		var buildingUsed []map[string]interface{} = []map[string]interface{}{}
 		if err := db.Raw(buildingUsedSQL, buildings[i]["id"]).Scan(&buildingUsed).Error; err != nil {
 			return nil, fmt.Errorf("error getting building used: %w", err)
 		}
@@ -330,7 +330,7 @@ func getLandDetails(landID string, muniCode string) (interface{}, error) {
 			ON psdt.property_signboard_display_type = as2.property_signboard_display_type_id
 		WHERE land_id = ?`
 
-	var signboards []map[string]interface{}
+	var signboards []map[string]interface{} = []map[string]interface{}{}
 	if err := db.Raw(signboardsSQL, landID).Scan(&signboards).Error; err != nil {
 		return nil, fmt.Errorf("error getting signboards: %w", err)
 	}
@@ -351,7 +351,6 @@ func getLandDetails(landID string, muniCode string) (interface{}, error) {
 	}
 	landData["asset_images"] = landAssetImages
 
-	// Return the combined data directly as a map
 	return map[string]interface{}{
 		"land_data":  landData,
 		"buildings":  buildings,
