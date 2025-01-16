@@ -3,6 +3,7 @@ package middleware
 import (
 	"citizen_system_back/utils/bedrock_auth"
 	"fmt"
+	"reflect"
 	"time"
 
 	"net/http"
@@ -41,15 +42,18 @@ func AuthMiddleware(c *gin.Context) {
 		return
 	}
 
-	// Safely extract the 'data' field from the response
-	jsonResult, ok := result.(map[string]interface{})
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Missing or invalid 'data' field in response"})
-		return
-	}
+	fmt.Println(" ******* result : ", result)
+	fmt.Println(" ******* result reflect: ", reflect.TypeOf(result))
+
+	// // Safely extract the 'data' field from the response
+	// jsonResult, ok := result.(map[string]interface{})
+	// if !ok {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Missing or invalid 'data' field in response"})
+	// 	return
+	// }
 
 	// Log extracted data for debugging
-	fmt.Println(" ****** result : ", jsonResult["data"])
+	// fmt.Println(" ****** result : ", jsonResult["data"])
 
 	// url := os.Getenv("AUTH_HOST") + "/api/v1/ums/profile?client_id=" + os.Getenv("AUTH_CLIENT_ID") + "&user_type=officer" + "&client_secret=" + os.Getenv("AUTH_CLIENT_SECRET")
 	// fmt.Println("**************** auth url : ", url)
