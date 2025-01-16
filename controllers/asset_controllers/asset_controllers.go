@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"citizen_system_back/utils/response"
 
@@ -101,15 +102,28 @@ func GetAssetByID() gin.HandlerFunc {
 func GetAssetByUserID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userId := c.Param("user_id")
-		parcelType := c.Query("parcel_type") // Gets ?parcel_type=value
-		muniCode := c.Query("muni_code")     // Gets ?muni_code=value
+		parcelType := c.Query("parcel_type")
+		muniCode := c.Query("muni_code")
+		pageStr := c.Query("page")
+		pageSizeStr := c.Query("page_size")
+
+		// Convert page and page_size to integers, with defaults
+		page, err := strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			page = 1 // Default to page 1 if invalid or not provided
+		}
+
+		pageSize, err := strconv.Atoi(pageSizeStr)
+		if err != nil || pageSize < 1 {
+			pageSize = 10 // Default to page size 10 if invalid or not provided
+		}
 		//get query name parcel_type and muni_code
 		if userId == "" {
 			c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid user_id", errors.New("user_id cannot be empty")))
 			return
 		}
 
-		asset, err := asset_services.GetAssetByUserID(userId, parcelType, muniCode)
+		asset, err := asset_services.GetAssetByUserID(userId, parcelType, muniCode, page, pageSize)
 		if err != nil {
 			switch {
 			case errors.Is(err, gorm.ErrRecordNotFound):

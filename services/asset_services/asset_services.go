@@ -36,8 +36,9 @@ func GetAssetByID(id string) (*models.AsLands, error) {
 	return &asset, nil
 }
 
-func GetAssetByUserID(userId string, parcelType string, muniCode string) ([]map[string]interface{}, error) {
+func GetAssetByUserID(userId string, parcelType string, muniCode string, page int, pageSize int) ([]map[string]interface{}, error) {
 	var db = database.GetDB()
+
 	var citizens []map[string]interface{}
 
 	query := `
