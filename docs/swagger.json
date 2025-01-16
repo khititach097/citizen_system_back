@@ -68,10 +68,34 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "User ID (UUID)",
+                        "description": "User ID",
                         "name": "user_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of items per page",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Type of parcel",
+                        "name": "parcel_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Municipality code",
+                        "name": "muni_code",
+                        "in": "query"
                     }
                 ],
                 "responses": {

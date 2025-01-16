@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	asset_services "citizen_system_back/modules/assets/services"
+	asset_types "citizen_system_back/modules/assets/types"
 	"citizen_system_back/utils/response"
 
 	"github.com/gin-gonic/gin"
@@ -103,7 +103,11 @@ func GetAssetByID() gin.HandlerFunc {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param user_id path string true "User ID (UUID)"
+// @Param user_id path string true "User ID"
+// @Param page query int false "Page number"
+// @Param page_size query int false "Number of items per page"
+// @Param parcel_type query int false "Type of parcel"
+// @Param muni_code query string false "Municipality code"
 // @Success 200 {object} response.Response
 // @Failure 400 {object} response.Response
 // @Failure 500 {object} response.Response
@@ -117,22 +121,30 @@ func GetAssetByUserID() gin.HandlerFunc {
 		pageSizeStr := c.Query("page_size")
 
 		// Convert page and page_size to integers, with defaults
-		page, err := strconv.Atoi(pageStr)
-		if err != nil || page < 1 {
-			page = 1 // Default to page 1 if invalid or not provided
-		}
+		// page, err := strconv.Atoi(pageStr)
+		// if err != nil || page < 1 {
+		// 	page = 1 // Default to page 1 if invalid or not provided
+		// }
 
-		pageSize, err := strconv.Atoi(pageSizeStr)
-		if err != nil || pageSize < 1 {
-			pageSize = 10 // Default to page size 10 if invalid or not provided
-		}
+		// pageSize, err := strconv.Atoi(pageSizeStr)
+		// if err != nil || pageSize < 1 {
+		// 	pageSize = 10 // Default to page size 10 if invalid or not provided
+		// }
 		//get query name parcel_type and muni_code
 		if userId == "" {
 			c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid user_id", errors.New("user_id cannot be empty")))
 			return
 		}
 
-		asset, err := asset_services.GetAssetByUserID(userId, parcelType, muniCode, page, pageSize)
+		query := asset_types.QueryParams{
+			Page:       pageStr,
+			PageSize:   pageSizeStr,
+			UserID:     userId,
+			MuniCode:   muniCode,
+			ParcelType: parcelType,
+		}
+
+		asset, err := asset_services.GetAssetByUserID(query)
 		if err != nil {
 			switch {
 			case errors.Is(err, gorm.ErrRecordNotFound):
