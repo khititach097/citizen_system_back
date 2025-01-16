@@ -8,10 +8,14 @@ import (
 
 // RegisterAssetRoutes registers routes for asset-related operations
 // @Security BearerAuth
-// // @Security CookieAuth
+// @Security CookieAuth
 func RegisterAssetRoutes(router *gin.RouterGroup) {
-	router.GET("/assets", asset_controllers.ListAssets())
-	// router.GET("/assets", middleware.AuthMiddleware, asset_controllers.ListAssets())
-	router.GET("/assets/:id", asset_controllers.GetAssetByID())
-	router.GET("/assets/get_asset_by_user_id/:user_id", asset_controllers.GetAssetByUserID())
+
+	assetGroup := router.Group("/assets") // Corrected variable name
+	{
+		assetGroup.GET("/", asset_controllers.ListAssets())
+		// router.GET("/assets", middleware.AuthMiddleware, asset_controllers.ListAssets())
+		assetGroup.GET("/:id", asset_controllers.GetAssetByID())
+		assetGroup.GET("/get_asset_by_user_id/:user_id", asset_controllers.GetAssetByUserID())
+	}
 }
