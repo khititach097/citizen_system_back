@@ -4,7 +4,11 @@ import (
 	"citizen_system_back/database"
 	"citizen_system_back/models"
 	asset_types "citizen_system_back/modules/assets/types"
+	survey_request_survices "citizen_system_back/modules/survey_request/services"
+	"encoding/json"
 	"fmt"
+	"strings"
+	"sync"
 )
 
 // GetAllAssets retrieves all assets from the database
@@ -280,7 +284,7 @@ func getLandDetails(landID string, muniCode string) (interface{}, error) {
 		LEFT JOIN property_building_main_type pbmt ON ab.property_building_main_type_id = pbmt.building_type_id
 		WHERE land_id = ? AND pbmt.muni_code = ?`
 
-	var buildings []map[string]interface{} = []map[string]interface{}{}
+	var buildings = []map[string]interface{}{}
 	if err := db.Raw(buildingsSQL, landID, muniCode).Scan(&buildings).Error; err != nil {
 		return nil, fmt.Errorf("error getting buildings: %w", err)
 	}
@@ -301,16 +305,14 @@ func getLandDetails(landID string, muniCode string) (interface{}, error) {
 			LEFT JOIN property_using_type put ON abu.building_using_type_id = put.using_type_id
 			WHERE building_id = ?`
 
-		var buildingUsed []map[string]interface{} = []map[string]interface{}{}
+		var buildingUsed = []map[string]interface{}{}
 		if err := db.Raw(buildingUsedSQL, buildings[i]["id"]).Scan(&buildingUsed).Error; err != nil {
 			return nil, fmt.Errorf("error getting building used: %w", err)
 		}
 		buildings[i]["building_used"] = buildingUsed
 
-		assetImages, err := getAssetAttachmentLatestSurveyByAssetId(buildings[i]["id"].(string), landID, map[string]string{"muni_code": muniCode})
-		if err != nil {
-			return nil, fmt.Errorf("error getting building asset images: %w", err)
-		}
+		assetImages := GetAssetAttachmentLatestSurveyByAssetId(buildings[i]["id"].(string), landID)
+
 		buildings[i]["asset_images"] = assetImages
 	}
 
@@ -330,25 +332,20 @@ func getLandDetails(landID string, muniCode string) (interface{}, error) {
 			ON psdt.property_signboard_display_type = as2.property_signboard_display_type_id
 		WHERE land_id = ?`
 
-	var signboards []map[string]interface{} = []map[string]interface{}{}
+	var signboards = []map[string]interface{}{}
 	if err := db.Raw(signboardsSQL, landID).Scan(&signboards).Error; err != nil {
 		return nil, fmt.Errorf("error getting signboards: %w", err)
 	}
 
 	// Get asset images for each signboard
 	for i := range signboards {
-		assetImages, err := getAssetAttachmentLatestSurveyByAssetId(signboards[i]["id"].(string), landID, map[string]string{"muni_code": muniCode})
-		if err != nil {
-			return nil, fmt.Errorf("error getting signboard asset images: %w", err)
-		}
+		assetImages := GetAssetAttachmentLatestSurveyByAssetId(signboards[i]["id"].(string), landID)
 		signboards[i]["asset_images"] = assetImages
 	}
 
 	// Get asset images for land
-	landAssetImages, err := getAssetAttachmentLatestSurveyByAssetId(landID, landID, map[string]string{"muni_code": muniCode})
-	if err != nil {
-		return nil, fmt.Errorf("error getting land asset images: %w", err)
-	}
+	landAssetImages := GetAssetAttachmentLatestSurveyByAssetId(landID, landID)
+
 	landData["asset_images"] = landAssetImages
 
 	return map[string]interface{}{
@@ -358,7 +355,7 @@ func getLandDetails(landID string, muniCode string) (interface{}, error) {
 	}, nil
 }
 
-func getAssetAttachmentLatestSurveyByAssetId(assetID string, landID string, params map[string]string) ([]asset_types.AssetAttachment, error) {
+func GetAssetAttachmentLatestSurveyByAssetId(assetID string, landID string) []asset_types.AssetAttachment {
 	var db = database.GetDB()
 	query := `
 		SELECT
@@ -368,14 +365,12 @@ func getAssetAttachmentLatestSurveyByAssetId(assetID string, landID string, para
 				aa.survey_request_id
 		FROM asset_attachment aa
 		WHERE aa.asset_id = ? 
-				AND aa.muni_code = ? 
 				AND (
 						CASE 
 								WHEN NOT EXISTS (
 										SELECT 1 
 										FROM survey_request sr 
 										WHERE sr.land_id = ? 
-												AND sr.muni_code = ? 
 										ORDER BY sr.created_at DESC LIMIT 1
 								) THEN aa.image_from = 3
 								ELSE aa.survey_request_id = (
@@ -383,7 +378,6 @@ func getAssetAttachmentLatestSurveyByAssetId(assetID string, landID string, para
 												sr.id 
 										FROM survey_request sr
 										WHERE sr.land_id = ? 
-												AND sr.muni_code = ? 
 										ORDER BY sr.created_at DESC
 										LIMIT 1
 								)
@@ -396,22 +390,757 @@ func getAssetAttachmentLatestSurveyByAssetId(assetID string, landID string, para
 	err := db.Raw(
 		query,
 		assetID,
-		params["muni_code"],
 		landID,
-		params["muni_code"],
 		landID,
-		params["muni_code"],
 	).Scan(&attachments).Error
 
 	if err != nil {
 		// Log the error but return an empty slice as per original function
 		fmt.Printf("Error fetching asset attachments: %v\n", err)
-		return []asset_types.AssetAttachment{}, nil
+		return []asset_types.AssetAttachment{}
 	}
 
 	if len(attachments) == 0 {
-		return []asset_types.AssetAttachment{}, nil
+		return []asset_types.AssetAttachment{}
 	}
 
-	return attachments, nil
+	return attachments
+}
+
+func GetAssetByLandId(landId string) (map[string]interface{}, error) {
+
+	latestSurveyRequest := survey_request_survices.FindLatestSurveyRequestByAssetId(landId, "", "")
+
+	getLandInfoDetail := GetLandInfoDetailByLandId(landId)
+	getLandOwners := GetLandOwnersByLandId(landId)
+	getLandAssets := GetAssetAttachmentLatestSurveyByAssetId(landId, landId)
+	getAdjoiningLands := GetAdjoiningLandDetailListByLandID(landId)
+
+	getLandUsedsInfo := GetLandUsedsInfo(landId)
+
+	landInfo := map[string]interface{}{
+		"land_info_detail": getLandInfoDetail,
+		"land_owners":      getLandOwners,
+		"asset_images":     getLandAssets,
+		"adjoining_lands":  getAdjoiningLands,
+	}
+
+	response := map[string]interface{}{
+		"latest_Survey_request": latestSurveyRequest,
+		"land_info":             landInfo,
+		"land_used_info":        getLandUsedsInfo,
+	}
+
+	return response, nil
+}
+
+func GetLandInfoDetailByLandId(landId string) map[string]interface{} {
+	var db = database.GetDB()
+	query := `
+		SELECT 
+			al.id,
+			al.parcel_type,
+			al.land_no,
+			al.deed_no,
+			al.survey_no, 
+			al.parcel_no,
+			al.utm_map1,
+			al.utm_map2,
+			al.utm_map3,
+			al.utm_map4,
+			al.utm_scale,
+			al.land_space_rai,
+			al.land_space_ngan,
+			al.land_space_wa,
+			al.land_space_sub_wa,
+			al.map_lat,
+			al.map_long,
+			al.cutax_land_id,
+			al.sync_id,
+			al.created_at,
+			al.created_by,
+			al.updated_at,
+			al.updated_by,
+			al.deleted_at,
+			al.deleted_by,
+			al.tax_year,
+			al.muni_code,
+			al.land_zone,
+			al.land_district_id,
+			al.land_sub_district_id,
+			al.estimated_price,
+			al.estimated_price_by_treasury,
+			al.is_estimated_by_treasury,
+			ST_AsGeoJSON(al.map_geometry) as map_geometry,
+			pdt.doc_type_name,
+			mm.report_dt,
+			mm.municipality_name_t,
+			mm.province_code,
+			mm.province_name_t,
+			mm.district_code,
+			mm.district_name_t,
+			mm.sub_district_code,
+			ms.subdistrict_name_t,
+			al.note,
+			al.special_usetax_type,
+			al.road
+		FROM as_lands al
+		LEFT JOIN master_municipality mm ON mm.municipality_code = al.muni_code 
+		LEFT JOIN master_subdistrict ms ON ms.subdistrict_code = mm.sub_district_code 
+		LEFT JOIN property_doc_type pdt ON pdt.doc_type_id = al.parcel_type
+		WHERE al.id = ? 
+		LIMIT 1
+	`
+
+	// Prepare to store the result as []map[string]interface{}
+	var landInfo = []map[string]interface{}{}
+
+	// Execute the raw SQL query
+	result := db.Raw(query, landId).Scan(&landInfo)
+
+	if result.Error != nil {
+		fmt.Println("Error executing query:", result.Error)
+		return map[string]interface{}{}
+	}
+
+	// If no results found, return an empty slice
+	if len(landInfo) == 0 {
+		return map[string]interface{}{}
+	}
+
+	return landInfo[0]
+}
+
+func GetLandOwnersByLandId(landID string) []map[string]interface{} {
+	var db = database.GetDB()
+
+	query := `
+        SELECT
+          alo.id,
+          c.id AS owner_id,
+          c.sync_id,
+          c.person_type_id,
+          c.tax_id,
+          c.prefix_name_id,
+          c.first_name,
+          c.last_name,
+          c.phone_number,
+          c.line_id,
+          c.email,
+          c.address_house_number,
+          c.address_zone,
+          c.address_street,
+          c.address_alleyway,
+          (
+            CASE
+              WHEN length(c.address_province_code) = 2 THEN concat(mp.region_code, c.address_province_code)
+              ELSE c.address_province_code
+            END 
+          ) AS address_province_code,
+          (
+            CASE
+              WHEN length(c.address_sub_district_code) = 6 THEN concat(mp.region_code, c.address_sub_district_code)
+              ELSE c.address_sub_district_code
+            END 
+          ) AS address_sub_district_code,
+          (
+            CASE
+              WHEN length(c.address_district_code) = 4 THEN concat(mp.region_code, c.address_district_code)
+              ELSE c.address_district_code
+            END 
+          ) AS address_district_code,
+          c.address_postcode,
+          c.created_at,
+          c.updated_at,
+          c.corporate_name,
+          c.codept4,
+          c.fax_no,
+          c.muni_code,
+          c.date_source,
+          c.citizen_id_check,
+          c.code_name,
+          c.current_address_house_number,
+          c.current_address_zone,
+          c.current_address_street,
+          c.current_address_alleyway,
+          (
+            CASE
+              WHEN length(c.current_address_province_code) = 2 THEN concat(mp.region_code, c.current_address_province_code)
+              ELSE c.current_address_province_code
+            END 
+          ) AS current_address_province_code,
+          (
+            CASE
+              WHEN length(c.current_address_sub_district_code) = 6 THEN concat(mp.region_code, c.current_address_sub_district_code)
+              ELSE c.current_address_sub_district_code
+            END 
+          ) AS current_address_sub_district_code,
+          (
+            CASE
+              WHEN length(c.current_address_district_code) = 4 THEN concat(mp.region_code, c.current_address_district_code)
+              ELSE c.current_address_district_code
+            END 
+          ) AS current_address_district_code,
+          c.current_address_postcode,
+          c.is_same_address,
+          pt.person_type_name,
+          pn.name AS prefix_name,
+          ms.province_name_t AS province_name,
+          ms.district_name_t AS district_name,
+          ms.subdistrict_name_t AS sub_district_name,
+          alo.owner_line_no,
+          (
+            trim(
+              CASE
+                WHEN pt.person_type_id = '1' THEN concat(pn.name, c.first_name, ' ', c.last_name)
+                WHEN pt.person_type_id = '99' THEN c.corporate_name
+                ELSE concat(pn.name, c.corporate_name)
+              END
+            )
+          ) AS text_full_name
+        FROM citizen c 
+        LEFT JOIN as_land_owners alo ON alo.owner_id = c.id
+        LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id 
+        LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
+        LEFT JOIN master_province mp ON
+          CASE
+            WHEN COALESCE(c.is_same_address, true) THEN
+              CASE
+                WHEN length(c.address_province_code) = 2 THEN mp.ad_province = c.address_province_code::NUMERIC 
+                ELSE mp.province_code = c.address_province_code
+              END
+            ELSE 
+              CASE 
+                WHEN length(c.current_address_province_code) = 2 THEN mp.ad_province = concat(mp.region_code, c.current_address_province_code)::NUMERIC 
+                ELSE mp.province_code = c.current_address_province_code
+              END
+          END
+        LEFT JOIN master_district md ON 
+          CASE
+            WHEN COALESCE(c.is_same_address, true) THEN
+              CASE
+                WHEN length(c.address_district_code) = 4 THEN md.district_code = concat(md.region_code, c.address_district_code)
+                ELSE md.district_code = c.address_district_code 
+              END
+            ELSE 
+              CASE 
+                WHEN length(c.current_address_district_code) = 4 THEN md.district_code = concat(md.region_code, c.current_address_district_code)
+                ELSE md.district_code = c.current_address_district_code
+              END
+          END
+        LEFT JOIN master_subdistrict ms ON 
+          CASE
+            WHEN COALESCE(c.is_same_address, true) THEN
+              CASE
+                WHEN length(c.address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code, c.address_sub_district_code)
+                ELSE ms.subdistrict_code = c.address_sub_district_code
+              END
+            ELSE 
+              CASE 
+                WHEN length(c.current_address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code, c.current_address_sub_district_code)
+                ELSE ms.subdistrict_code = c.current_address_sub_district_code
+              END
+          END
+        WHERE alo.land_id = ? 
+          AND (alo.deleted_at IS NULL AND alo.deleted_by IS NULL)
+        ORDER BY alo.owner_line_no NULLS LAST
+    `
+	var landOwners = []map[string]interface{}{}
+	result := db.Raw(query, landID).Scan(&landOwners)
+	if result.Error != nil {
+		return []map[string]interface{}{}
+	}
+
+	return landOwners
+}
+
+func GetAdjoiningLandDetailListByLandID(landID string) []map[string]interface{} {
+	var db = database.GetDB()
+	query := `
+		WITH adjoining_lands AS (
+			SELECT *
+			FROM as_adjoining_lands dal
+			WHERE dal.land_id = ?
+			AND (dal.deleted_at IS NULL AND dal.deleted_by IS NULL)
+		),
+		main_land_owner AS (
+			SELECT
+				alo2.owner_id AS main_owner_id
+			FROM as_land_owners alo2
+			WHERE alo2.land_id = ?
+			AND alo2.owner_line_no = '1'
+			AND (alo2.deleted_at IS NULL AND alo2.deleted_by IS NULL)
+		),
+		adjoining_lands_survey AS (
+			SELECT
+				sr.status,
+				sr.land_id,
+				sr.survey_code,
+				ROW_NUMBER() OVER (PARTITION BY sr.land_id ORDER BY sr.created_at DESC) AS created_at_order
+			FROM survey_request sr
+			WHERE sr.land_id IN (SELECT adl.adjoining_land_id FROM adjoining_lands adl)
+		),
+		merge_adjoining_lands_survey AS (
+			SELECT
+				adjl.*,
+				CASE
+					WHEN adjs.status IS NULL OR adjs.status IN ('7', '9') THEN FALSE
+					ELSE true
+				END AS is_survey
+			FROM adjoining_lands adjl
+			LEFT JOIN adjoining_lands_survey adjs ON adjs.land_id = adjl.adjoining_land_id
+				AND adjs.created_at_order = '1' OR NULL
+		),
+		final_result AS (
+			SELECT
+				madjs.id,
+				madjs.land_id,
+				madjs.adjoining_land_id,
+				madjs.status,
+				madjs.is_survey,
+				CASE
+					WHEN mlo.main_owner_id = COALESCE(dlo.owner_id, alo.owner_id) THEN TRUE
+					ELSE FALSE
+				END AS is_same_owner,
+				COALESCE(dl.parcel_no, al.parcel_no) AS parcel_no,
+				COALESCE(dl.deed_no, al.deed_no) AS deed_no,
+				COALESCE(dl.land_space_rai, al.land_space_rai) AS land_space_rai,
+				COALESCE(dl.land_space_ngan, al.land_space_ngan) AS land_space_ngan,
+				COALESCE(dl.land_space_wa, al.land_space_wa) AS land_space_wa,
+				COALESCE(dlo.owner_id, alo.owner_id) AS owner_id
+			FROM merge_adjoining_lands_survey madjs
+			LEFT JOIN df_lands dl ON dl.id = madjs.adjoining_land_id AND madjs.is_survey
+			LEFT JOIN df_land_owners dlo ON dlo.land_id = dl.id
+				AND madjs.is_survey
+				AND dlo.owner_line_no = '1'
+				AND (dlo.deleted_at IS NULL AND dlo.deleted_by IS NULL)
+			LEFT JOIN as_lands al ON al.id = madjs.adjoining_land_id
+				AND NOT madjs.is_survey
+			LEFT JOIN as_land_owners alo ON alo.land_id = al.id
+				AND NOT madjs.is_survey
+				AND alo.owner_line_no = '1'
+				AND (alo.deleted_at IS NULL AND alo.deleted_by IS NULL)
+			CROSS JOIN main_land_owner mlo
+		)
+		SELECT
+			fr.*,
+			trim(
+				CASE
+					WHEN pt.person_type_id = '1' THEN concat(pn."name", c.first_name, ' ', c.last_name)
+					WHEN pt.person_type_id = '99' THEN c.corporate_name
+					ELSE concat(pn."name", c.corporate_name)
+				END
+			) AS full_name,
+			c.tax_id,
+			c.phone_number,
+			pt.person_type_id,
+			pt.person_type_name
+		FROM final_result fr
+		LEFT JOIN citizen c ON c.id = fr.owner_id
+		LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id
+		LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id
+	`
+	var adJoiningLand = []map[string]interface{}{}
+	result := db.Raw(query, landID, landID).Scan(&adJoiningLand)
+	if result.Error != nil {
+		return []map[string]interface{}{}
+	}
+
+	return adJoiningLand
+}
+
+func GetLandUsedsWithoutBuildingOnLandByLandId(landID string) []map[string]interface{} {
+	var db = database.GetDB()
+	var allLandUsed = []map[string]interface{}{}
+	var result = []map[string]interface{}{}
+
+	// Fetch the data using GORM
+	err := db.Raw(`
+		SELECT
+			alu.*
+		FROM as_land_used alu
+		WHERE alu.land_id = ? 
+			AND (alu.deleted_at IS NULL AND alu.deleted_by IS NULL)
+		ORDER BY alu.cutax_landused_id ASC
+	`, landID).Scan(&allLandUsed).Error
+
+	if err != nil {
+		fmt.Println("Error fetching data:", err)
+		return []map[string]interface{}{}
+	}
+
+	if len(allLandUsed) == 0 {
+		return []map[string]interface{}{}
+	}
+
+	// Transform the results
+	for _, record := range allLandUsed {
+		var usingDetailID interface{}
+
+		if usingDetailIDStr, ok := record["using_detail_id"].(string); ok && usingDetailIDStr != "" {
+			// Try to parse as JSON first
+			var jsonData struct {
+				ID []string `json:"id"`
+			}
+
+			if err := json.Unmarshal([]byte(usingDetailIDStr), &jsonData); err != nil {
+				// If JSON parsing fails, use the alternative parsing method
+				usingDetailID = []string{}
+				idStr := ""
+
+				for _, char := range usingDetailIDStr {
+					if char != '[' && char != ']' && char != '\'' {
+						idStr += string(char)
+					}
+				}
+
+				if idStr != "" {
+					usingDetailID = strings.Split(strings.TrimSpace(idStr), ",")
+				}
+			} else {
+				usingDetailID = jsonData.ID
+			}
+		} else {
+			usingDetailID = []string{}
+		}
+
+		// Create new record with transformed using_detail_id
+		newRecord := make(map[string]interface{})
+		for key, value := range record {
+			newRecord[key] = value
+		}
+		newRecord["using_detail_id"] = usingDetailID
+
+		result = append(result, newRecord)
+	}
+
+	return result
+}
+
+func GetLandUsedBuildingByLandUsedId(landUsedID string) []map[string]interface{} {
+	var db = database.GetDB()
+	var data = []map[string]interface{}{}
+
+	// Fetch the data using GORM
+	err := db.Raw(`
+		SELECT
+			ab.*,
+			abu.id AS building_used_id,
+			c.first_name,
+			c.last_name,
+			c.prefix_name_id,
+			c.person_type_id,
+			c.corporate_name,
+			pn."name" AS prefix_name,
+			pt.person_type_name,
+			pbmt.building_type_name,
+			abo.owner_line_no,
+			pt.person_type_name,
+			trim(
+				concat(
+					CASE
+						WHEN pt.person_type_id IS NOT NULL THEN concat('(', pt.person_type_name, ') ')
+						ELSE ''
+					END,
+					CASE
+						WHEN c.person_type_id = 1 THEN concat(pn."name", c.first_name, ' ', c.last_name)
+						WHEN c.person_type_id = 99 THEN c.corporate_name
+						ELSE concat(pn."name", ' ', c.corporate_name)
+					END
+				)) AS text_owner_prefix_fullname,
+			trim(
+				CASE
+					WHEN c.person_type_id = 1 THEN concat(pn."name", c.first_name, ' ', c.last_name)
+					WHEN c.person_type_id = 99 THEN c.corporate_name
+					ELSE concat(pn."name", ' ', c.corporate_name)
+				END
+			) AS text_owner_fullname
+		FROM as_buildings ab
+			LEFT JOIN as_building_owners abo ON abo.building_id = ab.id AND abo.owner_line_no = '1'
+			LEFT JOIN citizen c ON c.id = abo.owner_id
+			LEFT JOIN as_building_used abu ON abu.building_id = ab.id
+			LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id
+			LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
+			LEFT JOIN property_building_main_type pbmt ON pbmt.building_type_id = ab.property_building_main_type_id
+				AND pbmt.building_type_year = ab.building_type_year
+		WHERE ab.land_used_id = ? 
+			AND (ab.deleted_at IS NULL AND ab.deleted_by IS NULL)
+		ORDER BY ab.cutax_building_id ASC
+	`, landUsedID).Scan(&data).Error
+
+	if err != nil {
+		fmt.Println("Error fetching data:", err)
+		return []map[string]interface{}{}
+	}
+
+	if len(data) == 0 {
+		return []map[string]interface{}{}
+	}
+
+	// Transform the result
+	for i := 0; i < len(data); i++ {
+		var allBuildOwners []map[string]interface{}
+
+		// Check if building has an ID
+		if buildingID, ok := data[i]["id"].(string); ok && buildingID != "" {
+			// Fetch building owners based on building ID
+			err := db.Raw(`
+				SELECT *
+				FROM as_building_owners
+				WHERE building_id = ?`, buildingID).Scan(&allBuildOwners).Error
+
+			if err != nil {
+				fmt.Println("Error fetching building owners:", err)
+				return []map[string]interface{}{}
+			}
+
+			// Fetch citizen data for each owner
+			for j := 0; j < len(allBuildOwners); j++ {
+				if ownerID, ok := allBuildOwners[j]["owner_id"].(string); ok && ownerID != "" {
+					var citizen models.Citizen
+					err := db.Where("id = ?", ownerID).First(&citizen).Error
+
+					if err != nil {
+						fmt.Println("Error fetching citizen data:", err)
+						return []map[string]interface{}{}
+					}
+
+					allBuildOwners[j]["citizen"] = citizen
+				}
+			}
+		}
+
+		// Add building owners to the data
+		data[i]["buildingOwners"] = allBuildOwners
+	}
+
+	// Return the transformed result
+	return data
+}
+
+func GetLandUsedsInfo(landID string) []map[string]interface{} {
+	var db = database.GetDB()
+	allLandUsed := GetLandUsedsWithoutBuildingOnLandByLandId(landID)
+
+	fmt.Println("allLandUsed ***>>>", allLandUsed)
+
+	if len(allLandUsed) == 0 {
+		return []map[string]interface{}{}
+	}
+
+	var wg sync.WaitGroup
+	var ownersMutex, buildingsMutex, imagesMutex sync.Mutex
+
+	// Fetch land used owners and citizens
+	fetchLandUsedOwners := func(i int) {
+		defer wg.Done()
+		var findAllAsLandUsedOwners []map[string]interface{}
+		err := db.Raw(`
+			SELECT * FROM as_land_used_owners aluo
+			WHERE aluo.land_used_id = ? AND aluo.deleted_at IS NULL
+		`, allLandUsed[i]["id"]).Scan(&findAllAsLandUsedOwners).Error
+
+		fmt.Println("allLandUsed[i] id ***>>>", allLandUsed[i]["id"])
+		fmt.Println("findAllAsLandUsedOwners ***>>>", findAllAsLandUsedOwners)
+		if err != nil {
+			fmt.Println("Error fetching as_land_used_owners:", err)
+			return
+		}
+
+		for j := range findAllAsLandUsedOwners {
+			citizen := fetchCitizens(findAllAsLandUsedOwners[j]["owner_id"])
+			findAllAsLandUsedOwners[j]["citizen"] = citizen
+		}
+
+		ownersMutex.Lock()
+		allLandUsed[i]["land_used_owners"] = findAllAsLandUsedOwners
+		ownersMutex.Unlock()
+	}
+
+	// Fetch building data
+	fetchBuildings := func(i int) {
+		defer wg.Done()
+		land_used_id, ok := allLandUsed[i]["id"].(string)
+		if ok {
+			buildings := GetLandUsedBuildingByLandUsedId(land_used_id)
+			buildingsMutex.Lock()
+			allLandUsed[i]["buildings"] = buildings
+			buildingsMutex.Unlock()
+		}
+	}
+
+	// Fetch images for land used and buildings
+	fetchImages := func(i int) {
+		defer wg.Done()
+		land_used_id, ok := allLandUsed[i]["id"].(string)
+		if ok {
+			imagesLandUsed := GetAssetAttachmentLatestSurveyByAssetId(land_used_id, landID)
+			imagesMutex.Lock()
+			allLandUsed[i]["asset_images"] = imagesLandUsed
+			imagesMutex.Unlock()
+		}
+
+		if buildings, ok := allLandUsed[i]["buildings"].([]map[string]interface{}); ok && len(buildings) > 0 {
+			var imageBuildings []asset_types.AssetAttachment
+			for _, building := range buildings {
+				building_id, ok := building["id"].(string)
+				if ok {
+					imageBuildings = append(imageBuildings, GetAssetAttachmentLatestSurveyByAssetId(building_id, landID)...)
+				}
+			}
+
+			imagesMutex.Lock()
+			for j := range buildings {
+				allLandUsed[i]["buildings"].([]map[string]interface{})[j]["asset_images"] = imageBuildings[j]
+			}
+			imagesMutex.Unlock()
+		}
+	}
+
+	// Start all goroutines
+	for i := range allLandUsed {
+		wg.Add(3) // Three goroutines per land used: owners, buildings, images
+		go fetchLandUsedOwners(i)
+		go fetchBuildings(i)
+		go fetchImages(i)
+	}
+	wg.Wait()
+
+	return allLandUsed
+}
+
+// Fetch citizens for each land used owner
+func fetchCitizens(ownerID interface{}) []map[string]interface{} {
+	var db = database.GetDB()
+	var citizens []map[string]interface{}
+	citizenQuery := `
+		SELECT
+									c.id AS owner_id,
+									c.sync_id,
+									c.person_type_id,
+									c.tax_id,
+									c.prefix_name_id,
+									c.first_name,
+									c.last_name,
+									c.phone_number,
+									c.line_id,
+									c.email,
+									c.address_house_number,
+									c.address_zone,
+									c.address_street,
+									c.address_alleyway,
+									(
+										CASE
+											WHEN length(c.address_province_code) = 2 THEN concat(mp.region_code, c.address_province_code)
+											ELSE c.address_province_code
+										END
+									)AS address_province_code,
+									(
+										CASE
+											WHEN length(c.address_sub_district_code) = 6 THEN concat(mp.region_code, c.address_sub_district_code)
+											ELSE c.address_sub_district_code
+										END
+									)AS address_sub_district_code,
+									(
+										CASE
+											WHEN length(c.address_district_code) = 4 THEN concat(mp.region_code, c.address_district_code)
+											ELSE c.address_district_code
+										END
+									)AS address_district_code,
+									c.address_postcode,
+									c.created_at,
+									c.updated_at,
+									c.corporate_name,
+									c.codept4,
+									c.fax_no,
+									c.muni_code,
+									c.date_source,
+									c.citizen_id_check,
+									c.code_name,
+									c.current_address_house_number,
+									c.current_address_zone,
+									c.current_address_street,
+									c.current_address_alleyway,
+									(
+										CASE
+											WHEN length(c.current_address_province_code) = 2 THEN concat(mp.region_code, c.current_address_province_code)
+											ELSE c.current_address_province_code
+										END
+									)AS current_address_province_code,
+									(
+										CASE
+											WHEN length(c.current_address_sub_district_code) = 6 THEN concat(mp.region_code, c.current_address_sub_district_code)
+											ELSE c.current_address_sub_district_code
+										END
+									)AS current_address_sub_district_code,
+									(
+										CASE
+											WHEN length(c.current_address_district_code) = 4 THEN concat(mp.region_code, c.current_address_district_code)
+											ELSE c.current_address_district_code
+										END
+									)AS current_address_district_code,
+									c.current_address_postcode,
+									c.is_same_address,
+									pt.person_type_name,
+									pn."name" AS prefix_name,
+									ms.province_name_t AS province_name,
+									ms.district_name_t AS district_name,
+									ms.subdistrict_name_t AS sub_district_name,
+									(
+									trim(
+										CASE
+											WHEN pt.person_type_id = '1' THEN concat(pn."name", c.first_name, ' ', c.last_name)
+											WHEN pt.person_type_id = '99' THEN c.corporate_name
+											ELSE concat(pn."name", c.corporate_name)
+										END
+									)
+									) AS text_full_name
+								FROM citizen c
+								LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id
+								LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
+								LEFT JOIN master_province mp ON
+									CASE
+										WHEN c.is_same_address THEN
+											CASE
+												WHEN length(c.address_province_code) = 2 THEN mp.ad_province = c.address_province_code::NUMERIC
+												ELSE mp.province_code = c.address_province_code
+											END
+										ELSE
+											CASE
+												WHEN length(c.current_address_province_code) = 2 THEN mp.ad_province = concat(mp.region_code , c.current_address_province_code)::NUMERIC
+												ELSE mp.province_code = c.current_address_province_code
+											END
+									END
+								LEFT JOIN master_district md ON
+									CASE
+										WHEN c.is_same_address THEN
+											CASE
+												WHEN length(c.address_district_code) = 4 THEN md.district_code = concat(md.region_code, c.address_district_code)
+												ELSE md.district_code = c.address_district_code
+											END
+										ELSE
+											CASE
+												WHEN length(c.current_address_district_code) = 4 THEN md.district_code = concat(md.region_code , c.current_address_district_code)
+												ELSE md.district_code = c.current_address_district_code
+											END
+									END
+								LEFT JOIN master_subdistrict ms ON
+									CASE
+										WHEN c.is_same_address THEN
+											CASE
+												WHEN length(c.address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code , c.address_sub_district_code)
+												ELSE ms.subdistrict_code = c.address_sub_district_code
+											END
+										ELSE
+											CASE
+												WHEN length(c.current_address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code , c.current_address_sub_district_code)
+												ELSE ms.subdistrict_code = c.current_address_sub_district_code
+											END
+									end
+								where c.id = ?`
+	err := db.Raw(citizenQuery, ownerID).Scan(&citizens).Error
+	if err != nil {
+		fmt.Println("Error fetching citizen data:", err)
+	}
+	return citizens
 }

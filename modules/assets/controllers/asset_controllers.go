@@ -158,3 +158,37 @@ func GetAssetByUserID() gin.HandlerFunc {
 		c.JSON(http.StatusOK, response.NewResponse("Asset retrieved successfully", asset))
 	}
 }
+
+// @Summary Get all asset
+// @Description Get all asset with land id
+// @Tags assets
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param land_id path string true "Land ID"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 500 {object} response.Response
+// @Router /api/v1/assets/get_asset_by_land_id/{land_id} [get]
+func GetAssetByLandID() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		landId := c.Param("land_id")
+		if landId == "" {
+			c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid land_id", errors.New("land_id cannot be empty")))
+			return
+		}
+
+		asset, err := asset_services.GetAssetByLandId(landId)
+		if err != nil {
+			switch {
+			case errors.Is(err, gorm.ErrRecordNotFound):
+				c.JSON(http.StatusNotFound, response.NewErrorResponse("Asset not found", err))
+			default:
+				c.JSON(http.StatusInternalServerError, response.NewErrorResponse("Failed to retrieve asset", err))
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, response.NewResponse("Asset retrieved successfully", asset))
+	}
+}
