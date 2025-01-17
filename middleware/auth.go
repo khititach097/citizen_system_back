@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	users_services "citizen_system_back/modules/users/services"
 	"citizen_system_back/utils/bedrock_auth"
 	"fmt"
 	"time"
@@ -27,7 +28,6 @@ type AuthResponse struct {
 func AuthMiddleware(c *gin.Context) {
 	// Extract the Authorization header
 	authHeader := c.GetHeader("Authorization")
-	fmt.Println(" ******* AuthMiddleware authHeader : ", authHeader)
 	if authHeader == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is missing"})
 		c.Abort()
@@ -42,7 +42,8 @@ func AuthMiddleware(c *gin.Context) {
 		return
 	}
 
-	fmt.Println(" ******* result : ", result)
+	// Process User from auth
+	go users_services.UpSertProfileCitizenUser(result)
 
 	// Proceed with the request
 	c.Set("profile", result)
