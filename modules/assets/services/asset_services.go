@@ -6,6 +6,7 @@ import (
 	asset_types "citizen_system_back/modules/assets/types"
 	survey_request_survices "citizen_system_back/modules/survey_request/services"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -358,32 +359,31 @@ func getLandDetails(landID string, muniCode string) (interface{}, error) {
 func GetAssetAttachmentLatestSurveyByAssetId(assetID string, landID string) []asset_types.AssetAttachment {
 	var db = database.GetDB()
 	query := `
-		SELECT
+		SELECT DISTINCT ON (aa.img_id)
 				aa.img_id,
 				aa.key,
 				aa.image_from,
 				aa.survey_request_id
 		FROM asset_attachment aa
-		WHERE aa.asset_id = ? 
-				AND (
-						CASE 
-								WHEN NOT EXISTS (
-										SELECT 1 
-										FROM survey_request sr 
-										WHERE sr.land_id = ? 
-										ORDER BY sr.created_at DESC LIMIT 1
-								) THEN aa.image_from = 3
-								ELSE aa.survey_request_id = (
-										SELECT 
-												sr.id 
-										FROM survey_request sr
-										WHERE sr.land_id = ? 
-										ORDER BY sr.created_at DESC
-										LIMIT 1
-								)
-						END
-				)
-		ORDER BY aa.created_date`
+		WHERE aa.asset_id = ?
+			AND (
+				-- Check if no matching survey request exists
+				(NOT EXISTS (
+					SELECT 1
+					FROM survey_request sr
+					WHERE sr.land_id = ?
+				) AND aa.image_from = 3)
+				OR
+				-- Match survey_request_id to the latest survey_request
+				(aa.survey_request_id = (
+					SELECT sr.id
+					FROM survey_request sr
+					WHERE sr.land_id = ?
+					ORDER BY sr.created_at DESC
+					LIMIT 1
+				))
+			)
+		ORDER BY aa.img_id, aa.created_date;`
 
 	var attachments []asset_types.AssetAttachment
 
@@ -412,11 +412,19 @@ func GetAssetByLandId(landId string) (map[string]interface{}, error) {
 	latestSurveyRequest := survey_request_survices.FindLatestSurveyRequestByAssetId(landId, "", "")
 
 	getLandInfoDetail := GetLandInfoDetailByLandId(landId)
-	getLandOwners := GetLandOwnersByLandId(landId)
-	getLandAssets := GetAssetAttachmentLatestSurveyByAssetId(landId, landId)
-	getAdjoiningLands := GetAdjoiningLandDetailListByLandID(landId)
 
-	getLandUsedsInfo := GetLandUsedsInfo(landId)
+	muniCode, ok := getLandInfoDetail["muni_code"].(string)
+	if !ok {
+		return nil, errors.New("muni_code is missing or invalid in land info details")
+	}
+
+	getLandOwners := GetLandOwnersByLandId(landId, muniCode)
+	getLandAssets := GetAssetAttachmentLatestSurveyByAssetId(landId, landId)
+	getAdjoiningLands := GetAdjoiningLandDetailListByLandID(landId, muniCode)
+
+	getLandUsedsInfo := GetLandUsedsInfo(landId, muniCode)
+
+	getSignboardInfo := GetAllSignboardsOnLandByLandID(landId, muniCode)
 
 	landInfo := map[string]interface{}{
 		"land_info_detail": getLandInfoDetail,
@@ -426,9 +434,10 @@ func GetAssetByLandId(landId string) (map[string]interface{}, error) {
 	}
 
 	response := map[string]interface{}{
-		"latest_Survey_request": latestSurveyRequest,
+		"latest_survey_request": latestSurveyRequest,
 		"land_info":             landInfo,
 		"land_used_info":        getLandUsedsInfo,
+		"signboard_info":        getSignboardInfo,
 	}
 
 	return response, nil
@@ -511,13 +520,13 @@ func GetLandInfoDetailByLandId(landId string) map[string]interface{} {
 	return landInfo[0]
 }
 
-func GetLandOwnersByLandId(landID string) []map[string]interface{} {
+func GetLandOwnersByLandId(landID string, muniCode string) []map[string]interface{} {
 	var db = database.GetDB()
 
 	query := `
         SELECT
           alo.id,
-          c.id AS owner_id,
+          c.id owner_id,
           c.sync_id,
           c.person_type_id,
           c.tax_id,
@@ -536,19 +545,19 @@ func GetLandOwnersByLandId(landID string) []map[string]interface{} {
               WHEN length(c.address_province_code) = 2 THEN concat(mp.region_code, c.address_province_code)
               ELSE c.address_province_code
             END 
-          ) AS address_province_code,
+          )AS address_province_code,
           (
             CASE
               WHEN length(c.address_sub_district_code) = 6 THEN concat(mp.region_code, c.address_sub_district_code)
               ELSE c.address_sub_district_code
             END 
-          ) AS address_sub_district_code,
+          )AS address_sub_district_code,
           (
             CASE
               WHEN length(c.address_district_code) = 4 THEN concat(mp.region_code, c.address_district_code)
               ELSE c.address_district_code
             END 
-          ) AS address_district_code,
+          )AS address_district_code,
           c.address_postcode,
           c.created_at,
           c.updated_at,
@@ -568,38 +577,38 @@ func GetLandOwnersByLandId(landID string) []map[string]interface{} {
               WHEN length(c.current_address_province_code) = 2 THEN concat(mp.region_code, c.current_address_province_code)
               ELSE c.current_address_province_code
             END 
-          ) AS current_address_province_code,
+          )AS current_address_province_code,
           (
             CASE
               WHEN length(c.current_address_sub_district_code) = 6 THEN concat(mp.region_code, c.current_address_sub_district_code)
               ELSE c.current_address_sub_district_code
             END 
-          ) AS current_address_sub_district_code,
+          )AS current_address_sub_district_code,
           (
             CASE
               WHEN length(c.current_address_district_code) = 4 THEN concat(mp.region_code, c.current_address_district_code)
               ELSE c.current_address_district_code
             END 
-          ) AS current_address_district_code,
+          )AS current_address_district_code,
           c.current_address_postcode,
           c.is_same_address,
           pt.person_type_name,
-          pn.name AS prefix_name,
+          pn."name" AS prefix_name,
           ms.province_name_t AS province_name,
           ms.district_name_t AS district_name,
           ms.subdistrict_name_t AS sub_district_name,
           alo.owner_line_no,
           (
-            trim(
-              CASE
-                WHEN pt.person_type_id = '1' THEN concat(pn.name, c.first_name, ' ', c.last_name)
-                WHEN pt.person_type_id = '99' THEN c.corporate_name
-                ELSE concat(pn.name, c.corporate_name)
-              END
-            )
+          trim(
+            CASE
+              WHEN pt.person_type_id = '1' THEN concat(pn."name", c.first_name, ' ', c.last_name)
+              WHEN pt.person_type_id = '99' THEN c.corporate_name
+              ELSE concat(pn."name", c.corporate_name)
+            END
+          )
           ) AS text_full_name
         FROM citizen c 
-        LEFT JOIN as_land_owners alo ON alo.owner_id = c.id
+        LEFT JOIN as_land_owners alo ON alo.owner_id = c.id AND alo.muni_code = ?
         LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id 
         LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
         LEFT JOIN master_province mp ON
@@ -611,7 +620,7 @@ func GetLandOwnersByLandId(landID string) []map[string]interface{} {
               END
             ELSE 
               CASE 
-                WHEN length(c.current_address_province_code) = 2 THEN mp.ad_province = concat(mp.region_code, c.current_address_province_code)::NUMERIC 
+                WHEN length(c.current_address_province_code) = 2 THEN mp.ad_province = concat(mp.region_code , c.current_address_province_code)::NUMERIC 
                 ELSE mp.province_code = c.current_address_province_code
               END
           END
@@ -624,7 +633,7 @@ func GetLandOwnersByLandId(landID string) []map[string]interface{} {
               END
             ELSE 
               CASE 
-                WHEN length(c.current_address_district_code) = 4 THEN md.district_code = concat(md.region_code, c.current_address_district_code)
+                WHEN length(c.current_address_district_code) = 4 THEN md.district_code = concat(md.region_code , c.current_address_district_code)
                 ELSE md.district_code = c.current_address_district_code
               END
           END
@@ -632,21 +641,23 @@ func GetLandOwnersByLandId(landID string) []map[string]interface{} {
           CASE
             WHEN COALESCE(c.is_same_address, true) THEN
               CASE
-                WHEN length(c.address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code, c.address_sub_district_code)
+                WHEN length(c.address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code , c.address_sub_district_code)
                 ELSE ms.subdistrict_code = c.address_sub_district_code
               END
             ELSE 
               CASE 
-                WHEN length(c.current_address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code, c.current_address_sub_district_code)
+                WHEN length(c.current_address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code , c.current_address_sub_district_code)
                 ELSE ms.subdistrict_code = c.current_address_sub_district_code
               END
           END
-        WHERE alo.land_id = ? 
+        WHERE alo.land_id = ?
           AND (alo.deleted_at IS NULL AND alo.deleted_by IS NULL)
+          AND alo.muni_code = ?
+          AND c.muni_code = ?
         ORDER BY alo.owner_line_no NULLS LAST
     `
 	var landOwners = []map[string]interface{}{}
-	result := db.Raw(query, landID).Scan(&landOwners)
+	result := db.Raw(query, muniCode, landID, muniCode, muniCode).Scan(&landOwners)
 	if result.Error != nil {
 		return []map[string]interface{}{}
 	}
@@ -654,94 +665,392 @@ func GetLandOwnersByLandId(landID string) []map[string]interface{} {
 	return landOwners
 }
 
-func GetAdjoiningLandDetailListByLandID(landID string) []map[string]interface{} {
+func GetLandUsedOwnersByLandUsedId(landUsedId string, muniCode string) []map[string]interface{} {
+	var db = database.GetDB()
+
+	query := `
+        SELECT
+          aluo.id,
+          c.id owner_id,
+          c.sync_id,
+          c.person_type_id,
+          c.tax_id,
+          c.prefix_name_id,
+          c.first_name,
+          c.last_name,
+          c.phone_number,
+          c.line_id,
+          c.email,
+          c.address_house_number,
+          c.address_zone,
+          c.address_street,
+          c.address_alleyway,
+          (
+            CASE
+              WHEN length(c.address_province_code) = 2 THEN concat(mp.region_code, c.address_province_code)
+              ELSE c.address_province_code
+            END 
+          )AS address_province_code,
+          (
+            CASE
+              WHEN length(c.address_sub_district_code) = 6 THEN concat(mp.region_code, c.address_sub_district_code)
+              ELSE c.address_sub_district_code
+            END 
+          )AS address_sub_district_code,
+          (
+            CASE
+              WHEN length(c.address_district_code) = 4 THEN concat(mp.region_code, c.address_district_code)
+              ELSE c.address_district_code
+            END 
+          )AS address_district_code,
+          c.address_postcode,
+          c.created_at,
+          c.updated_at,
+          c.corporate_name,
+          c.codept4,
+          c.fax_no,
+          c.muni_code,
+          c.date_source,
+          c.citizen_id_check,
+          c.code_name,
+          c.current_address_house_number,
+          c.current_address_zone,
+          c.current_address_street,
+          c.current_address_alleyway,
+          (
+            CASE
+              WHEN length(c.current_address_province_code) = 2 THEN concat(mp.region_code, c.current_address_province_code)
+              ELSE c.current_address_province_code
+            END 
+          )AS current_address_province_code,
+          (
+            CASE
+              WHEN length(c.current_address_sub_district_code) = 6 THEN concat(mp.region_code, c.current_address_sub_district_code)
+              ELSE c.current_address_sub_district_code
+            END 
+          )AS current_address_sub_district_code,
+          (
+            CASE
+              WHEN length(c.current_address_district_code) = 4 THEN concat(mp.region_code, c.current_address_district_code)
+              ELSE c.current_address_district_code
+            END 
+          )AS current_address_district_code,
+          c.current_address_postcode,
+          c.is_same_address,
+          pt.person_type_name,
+          pn."name" AS prefix_name,
+          ms.province_name_t AS province_name,
+          ms.district_name_t AS district_name,
+          ms.subdistrict_name_t AS sub_district_name,
+          aluo.owner_line_no,
+          (
+          trim(
+            CASE
+              WHEN pt.person_type_id = '1' THEN concat(pn."name", c.first_name, ' ', c.last_name)
+              WHEN pt.person_type_id = '99' THEN c.corporate_name
+              ELSE concat(pn."name", c.corporate_name)
+            END
+          )
+          ) AS text_full_name
+        FROM citizen c 
+        LEFT JOIN as_land_used_owners aluo ON aluo.owner_id = c.id AND aluo.muni_code = ?
+        LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id 
+        LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
+        LEFT JOIN master_province mp ON
+          CASE
+            WHEN COALESCE(c.is_same_address, true) THEN
+              CASE
+                WHEN length(c.address_province_code) = 2 THEN mp.ad_province = c.address_province_code::NUMERIC 
+                ELSE mp.province_code = c.address_province_code
+              END
+            ELSE 
+              CASE 
+                WHEN length(c.current_address_province_code) = 2 THEN mp.ad_province = concat(mp.region_code , c.current_address_province_code)::NUMERIC 
+                ELSE mp.province_code = c.current_address_province_code
+              END
+          END
+        LEFT JOIN master_district md ON 
+          CASE
+            WHEN COALESCE(c.is_same_address, true) THEN
+              CASE
+                WHEN length(c.address_district_code) = 4 THEN md.district_code = concat(md.region_code, c.address_district_code)
+                ELSE md.district_code = c.address_district_code 
+              END
+            ELSE 
+              CASE 
+                WHEN length(c.current_address_district_code) = 4 THEN md.district_code = concat(md.region_code , c.current_address_district_code)
+                ELSE md.district_code = c.current_address_district_code
+              END
+          END
+        LEFT JOIN master_subdistrict ms ON 
+          CASE
+            WHEN COALESCE(c.is_same_address, true) THEN
+              CASE
+                WHEN length(c.address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code , c.address_sub_district_code)
+                ELSE ms.subdistrict_code = c.address_sub_district_code
+              END
+            ELSE 
+              CASE 
+                WHEN length(c.current_address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code , c.current_address_sub_district_code)
+                ELSE ms.subdistrict_code = c.current_address_sub_district_code
+              END
+          END
+        WHERE aluo.land_used_id = ?
+          AND (aluo.deleted_at IS NULL AND aluo.deleted_by IS NULL)
+          AND aluo.muni_code = ?
+          AND c.muni_code = ?
+        ORDER BY aluo.owner_line_no NULLS LAST
+    `
+	var landOwners = []map[string]interface{}{}
+	result := db.Raw(query, muniCode, landUsedId, muniCode, muniCode).Scan(&landOwners)
+	if result.Error != nil {
+		fmt.Println("Error fetching data:", result.Error)
+		return []map[string]interface{}{}
+	}
+
+	return landOwners
+}
+
+func GetBuildingOwnersByBuildingId(buildingId string, muniCode string) []map[string]interface{} {
+	var db = database.GetDB()
+
+	query := `
+        SELECT
+          abo.id,
+          c.id owner_id,
+          c.sync_id,
+          c.person_type_id,
+          c.tax_id,
+          c.prefix_name_id,
+          c.first_name,
+          c.last_name,
+          c.phone_number,
+          c.line_id,
+          c.email,
+          c.address_house_number,
+          c.address_zone,
+          c.address_street,
+          c.address_alleyway,
+          (
+            CASE
+              WHEN length(c.address_province_code) = 2 THEN concat(mp.region_code, c.address_province_code)
+              ELSE c.address_province_code
+            END 
+          )AS address_province_code,
+          (
+            CASE
+              WHEN length(c.address_sub_district_code) = 6 THEN concat(mp.region_code, c.address_sub_district_code)
+              ELSE c.address_sub_district_code
+            END 
+          )AS address_sub_district_code,
+          (
+            CASE
+              WHEN length(c.address_district_code) = 4 THEN concat(mp.region_code, c.address_district_code)
+              ELSE c.address_district_code
+            END 
+          )AS address_district_code,
+          c.address_postcode,
+          c.created_at,
+          c.updated_at,
+          c.corporate_name,
+          c.codept4,
+          c.fax_no,
+          c.muni_code,
+          c.date_source,
+          c.citizen_id_check,
+          c.code_name,
+          c.current_address_house_number,
+          c.current_address_zone,
+          c.current_address_street,
+          c.current_address_alleyway,
+          (
+            CASE
+              WHEN length(c.current_address_province_code) = 2 THEN concat(mp.region_code, c.current_address_province_code)
+              ELSE c.current_address_province_code
+            END 
+          )AS current_address_province_code,
+          (
+            CASE
+              WHEN length(c.current_address_sub_district_code) = 6 THEN concat(mp.region_code, c.current_address_sub_district_code)
+              ELSE c.current_address_sub_district_code
+            END 
+          )AS current_address_sub_district_code,
+          (
+            CASE
+              WHEN length(c.current_address_district_code) = 4 THEN concat(mp.region_code, c.current_address_district_code)
+              ELSE c.current_address_district_code
+            END 
+          )AS current_address_district_code,
+          c.current_address_postcode,
+          c.is_same_address,
+          pt.person_type_name,
+          pn."name" AS prefix_name,
+          ms.province_name_t AS province_name,
+          ms.district_name_t AS district_name,
+          ms.subdistrict_name_t AS sub_district_name,
+          abo.owner_line_no,
+          (
+          trim(
+            CASE
+              WHEN pt.person_type_id = '1' THEN concat(pn."name", c.first_name, ' ', c.last_name)
+              WHEN pt.person_type_id = '99' THEN c.corporate_name
+              ELSE concat(pn."name", c.corporate_name)
+            END
+          )
+          ) AS text_full_name
+        FROM citizen c 
+        LEFT JOIN as_building_owners abo ON abo.owner_id = c.id AND abo.muni_code = ?
+        LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id 
+        LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
+        LEFT JOIN master_province mp ON
+          CASE
+            WHEN COALESCE(c.is_same_address, true) THEN
+              CASE
+                WHEN length(c.address_province_code) = 2 THEN mp.ad_province = c.address_province_code::NUMERIC 
+                ELSE mp.province_code = c.address_province_code
+              END
+            ELSE 
+              CASE 
+                WHEN length(c.current_address_province_code) = 2 THEN mp.ad_province = concat(mp.region_code , c.current_address_province_code)::NUMERIC 
+                ELSE mp.province_code = c.current_address_province_code
+              END
+          END
+        LEFT JOIN master_district md ON 
+          CASE
+            WHEN COALESCE(c.is_same_address, true) THEN
+              CASE
+                WHEN length(c.address_district_code) = 4 THEN md.district_code = concat(md.region_code, c.address_district_code)
+                ELSE md.district_code = c.address_district_code 
+              END
+            ELSE 
+              CASE 
+                WHEN length(c.current_address_district_code) = 4 THEN md.district_code = concat(md.region_code , c.current_address_district_code)
+                ELSE md.district_code = c.current_address_district_code
+              END
+          END
+        LEFT JOIN master_subdistrict ms ON 
+          CASE
+            WHEN COALESCE(c.is_same_address, true) THEN
+              CASE
+                WHEN length(c.address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code , c.address_sub_district_code)
+                ELSE ms.subdistrict_code = c.address_sub_district_code
+              END
+            ELSE 
+              CASE 
+                WHEN length(c.current_address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code , c.current_address_sub_district_code)
+                ELSE ms.subdistrict_code = c.current_address_sub_district_code
+              END
+          END
+        WHERE abo.building_id = ?
+          AND (abo.deleted_at IS NULL AND abo.deleted_by IS NULL)
+          AND abo.muni_code = ?
+          AND c.muni_code = ?
+        ORDER BY abo.owner_line_no NULLS LAST
+    `
+	var landOwners = []map[string]interface{}{}
+	result := db.Raw(query, muniCode, buildingId, muniCode, muniCode).Scan(&landOwners)
+	if result.Error != nil {
+		fmt.Println("Error fetching data:", result.Error)
+		return []map[string]interface{}{}
+	}
+
+	return landOwners
+}
+
+func GetAdjoiningLandDetailListByLandID(landID string, muniCode string) []map[string]interface{} {
 	var db = database.GetDB()
 	query := `
 		WITH adjoining_lands AS (
-			SELECT *
-			FROM as_adjoining_lands dal
-			WHERE dal.land_id = ?
-			AND (dal.deleted_at IS NULL AND dal.deleted_by IS NULL)
-		),
-		main_land_owner AS (
-			SELECT
-				alo2.owner_id AS main_owner_id
-			FROM as_land_owners alo2
-			WHERE alo2.land_id = ?
-			AND alo2.owner_line_no = '1'
-			AND (alo2.deleted_at IS NULL AND alo2.deleted_by IS NULL)
-		),
-		adjoining_lands_survey AS (
-			SELECT
-				sr.status,
-				sr.land_id,
-				sr.survey_code,
-				ROW_NUMBER() OVER (PARTITION BY sr.land_id ORDER BY sr.created_at DESC) AS created_at_order
-			FROM survey_request sr
-			WHERE sr.land_id IN (SELECT adl.adjoining_land_id FROM adjoining_lands adl)
-		),
-		merge_adjoining_lands_survey AS (
-			SELECT
-				adjl.*,
-				CASE
-					WHEN adjs.status IS NULL OR adjs.status IN ('7', '9') THEN FALSE
-					ELSE true
-				END AS is_survey
-			FROM adjoining_lands adjl
-			LEFT JOIN adjoining_lands_survey adjs ON adjs.land_id = adjl.adjoining_land_id
-				AND adjs.created_at_order = '1' OR NULL
-		),
-		final_result AS (
-			SELECT
-				madjs.id,
-				madjs.land_id,
-				madjs.adjoining_land_id,
-				madjs.status,
-				madjs.is_survey,
-				CASE
-					WHEN mlo.main_owner_id = COALESCE(dlo.owner_id, alo.owner_id) THEN TRUE
-					ELSE FALSE
-				END AS is_same_owner,
-				COALESCE(dl.parcel_no, al.parcel_no) AS parcel_no,
-				COALESCE(dl.deed_no, al.deed_no) AS deed_no,
-				COALESCE(dl.land_space_rai, al.land_space_rai) AS land_space_rai,
-				COALESCE(dl.land_space_ngan, al.land_space_ngan) AS land_space_ngan,
-				COALESCE(dl.land_space_wa, al.land_space_wa) AS land_space_wa,
-				COALESCE(dlo.owner_id, alo.owner_id) AS owner_id
-			FROM merge_adjoining_lands_survey madjs
-			LEFT JOIN df_lands dl ON dl.id = madjs.adjoining_land_id AND madjs.is_survey
-			LEFT JOIN df_land_owners dlo ON dlo.land_id = dl.id
-				AND madjs.is_survey
-				AND dlo.owner_line_no = '1'
-				AND (dlo.deleted_at IS NULL AND dlo.deleted_by IS NULL)
-			LEFT JOIN as_lands al ON al.id = madjs.adjoining_land_id
-				AND NOT madjs.is_survey
-			LEFT JOIN as_land_owners alo ON alo.land_id = al.id
-				AND NOT madjs.is_survey
-				AND alo.owner_line_no = '1'
-				AND (alo.deleted_at IS NULL AND alo.deleted_by IS NULL)
-			CROSS JOIN main_land_owner mlo
-		)
-		SELECT
-			fr.*,
-			trim(
-				CASE
-					WHEN pt.person_type_id = '1' THEN concat(pn."name", c.first_name, ' ', c.last_name)
-					WHEN pt.person_type_id = '99' THEN c.corporate_name
-					ELSE concat(pn."name", c.corporate_name)
-				END
-			) AS full_name,
-			c.tax_id,
-			c.phone_number,
-			pt.person_type_id,
-			pt.person_type_name
-		FROM final_result fr
-		LEFT JOIN citizen c ON c.id = fr.owner_id
-		LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id
-		LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id
+          SELECT *
+          FROM as_adjoining_lands dal
+          WHERE dal.land_id = ?
+            AND (dal.deleted_at IS NULL AND dal.deleted_by IS NULL)
+            AND dal.muni_code = ?
+        ),
+        main_land_owner AS (
+          SELECT
+            alo2.owner_id AS main_owner_id
+          FROM as_land_owners alo2
+          WHERE alo2.land_id = ?
+            AND alo2.owner_line_no = '1'
+            AND (alo2.deleted_at IS NULL AND alo2.deleted_by IS NULL)
+            AND alo2.muni_code = ?
+        ),
+        adjoining_lands_survey AS (
+          SELECT
+            sr.status,
+            sr.land_id,
+            sr.survey_code,
+            ROW_NUMBER() OVER (PARTITION BY sr.land_id ORDER BY sr.created_at DESC) AS created_at_order
+          FROM survey_request sr
+          WHERE sr.land_id IN (SELECT adl.adjoining_land_id FROM adjoining_lands adl)
+            AND sr.muni_code = ?
+        ),
+        merge_adjoining_lands_survey AS (
+          SELECT
+            adjl.*,
+            CASE
+              WHEN adjs.status IS NULL OR adjs.status IN ('7', '9') THEN FALSE
+              ELSE true
+            END AS is_survey
+          FROM adjoining_lands adjl
+          LEFT JOIN adjoining_lands_survey adjs ON adjs.land_id = adjl.adjoining_land_id
+            AND adjs.created_at_order = '1' OR NULL
+        ),
+        final_result AS (
+          SELECT
+            madjs.id,
+            madjs.land_id,
+            madjs.adjoining_land_id,
+            madjs.status,
+            madjs.is_survey,
+            CASE
+                WHEN mlo.main_owner_id = COALESCE(dlo.owner_id, alo.owner_id) THEN TRUE
+                ELSE FALSE
+            END AS is_same_owner,
+            COALESCE(dl.parcel_no, al.parcel_no) AS parcel_no,
+            COALESCE(dl.deed_no, al.deed_no) AS deed_no,
+            COALESCE(dl.land_space_rai, al.land_space_rai) AS land_space_rai,
+            COALESCE(dl.land_space_ngan, al.land_space_ngan) AS land_space_ngan,
+            COALESCE(dl.land_space_wa, al.land_space_wa) AS land_space_wa,
+            COALESCE(dlo.owner_id, alo.owner_id) AS owner_id
+          FROM merge_adjoining_lands_survey madjs
+          LEFT JOIN df_lands dl ON dl.id = madjs.adjoining_land_id AND madjs.is_survey AND dl.muni_code = ?
+          LEFT JOIN df_land_owners dlo ON dlo.land_id = dl.id
+            AND madjs.is_survey
+            AND dlo.owner_line_no = '1'
+            AND (dlo.deleted_at IS NULL AND dlo.deleted_by IS NULL)
+            AND dlo.muni_code = ?
+          LEFT JOIN as_lands al ON al.id = madjs.adjoining_land_id
+          	AND NOT madjs.is_survey
+          	AND al.muni_code = ?
+          LEFT JOIN as_land_owners alo ON alo.land_id = al.id
+            AND NOT madjs.is_survey
+            AND alo.owner_line_no = '1'
+            AND (alo.deleted_at IS NULL AND alo.deleted_by IS NULL)
+            AND alo.muni_code = ?
+          CROSS JOIN main_land_owner mlo
+        )
+        SELECT
+          fr.*,
+          trim(
+            CASE
+              WHEN pt.person_type_id = '1' THEN concat(pn."name", c.first_name, ' ', c.last_name)
+              WHEN pt.person_type_id = '99' THEN c.corporate_name
+              ELSE concat(pn."name", c.corporate_name)
+            END
+          ) AS full_name,
+          c.tax_id,
+          c.phone_number,
+          pt.person_type_id,
+          pt.person_type_name
+        FROM final_result fr
+        LEFT JOIN citizen c ON c.id = fr.owner_id AND c.muni_code = ?
+        LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id
+        LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id
 	`
 	var adJoiningLand = []map[string]interface{}{}
-	result := db.Raw(query, landID, landID).Scan(&adJoiningLand)
+	result := db.Raw(query, landID, muniCode, landID, muniCode, muniCode, muniCode, muniCode, muniCode, muniCode, muniCode).Scan(&adJoiningLand)
 	if result.Error != nil {
 		return []map[string]interface{}{}
 	}
@@ -749,20 +1058,21 @@ func GetAdjoiningLandDetailListByLandID(landID string) []map[string]interface{} 
 	return adJoiningLand
 }
 
-func GetLandUsedsWithoutBuildingOnLandByLandId(landID string) []map[string]interface{} {
+func GetLandUsedsWithoutBuildingOnLandByLandId(landID string, muniCode string) []map[string]interface{} {
 	var db = database.GetDB()
 	var allLandUsed = []map[string]interface{}{}
 	var result = []map[string]interface{}{}
 
 	// Fetch the data using GORM
 	err := db.Raw(`
-		SELECT
-			alu.*
-		FROM as_land_used alu
-		WHERE alu.land_id = ? 
-			AND (alu.deleted_at IS NULL AND alu.deleted_by IS NULL)
-		ORDER BY alu.cutax_landused_id ASC
-	`, landID).Scan(&allLandUsed).Error
+       SELECT
+          alu.*
+        FROM as_land_used alu
+        WHERE alu.land_id =?
+          AND (alu.deleted_at IS NULL AND alu.deleted_by IS NULL)
+          AND alu.muni_code = ?
+        ORDER BY alu.cutax_landused_id ASC
+	`, landID, muniCode).Scan(&allLandUsed).Error
 
 	if err != nil {
 		fmt.Println("Error fetching data:", err)
@@ -817,112 +1127,115 @@ func GetLandUsedsWithoutBuildingOnLandByLandId(landID string) []map[string]inter
 	return result
 }
 
-func GetLandUsedBuildingByLandUsedId(landUsedID string) []map[string]interface{} {
+func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[string]interface{} {
 	var db = database.GetDB()
-	var data = []map[string]interface{}{}
+	var allBuildings = []map[string]interface{}{}
 
 	// Fetch the data using GORM
 	err := db.Raw(`
 		SELECT
-			ab.*,
-			abu.id AS building_used_id,
-			c.first_name,
-			c.last_name,
-			c.prefix_name_id,
-			c.person_type_id,
-			c.corporate_name,
-			pn."name" AS prefix_name,
-			pt.person_type_name,
-			pbmt.building_type_name,
-			abo.owner_line_no,
-			pt.person_type_name,
-			trim(
-				concat(
-					CASE
-						WHEN pt.person_type_id IS NOT NULL THEN concat('(', pt.person_type_name, ') ')
-						ELSE ''
-					END,
-					CASE
-						WHEN c.person_type_id = 1 THEN concat(pn."name", c.first_name, ' ', c.last_name)
-						WHEN c.person_type_id = 99 THEN c.corporate_name
-						ELSE concat(pn."name", ' ', c.corporate_name)
-					END
-				)) AS text_owner_prefix_fullname,
-			trim(
-				CASE
-					WHEN c.person_type_id = 1 THEN concat(pn."name", c.first_name, ' ', c.last_name)
-					WHEN c.person_type_id = 99 THEN c.corporate_name
-					ELSE concat(pn."name", ' ', c.corporate_name)
-				END
-			) AS text_owner_fullname
-		FROM as_buildings ab
-			LEFT JOIN as_building_owners abo ON abo.building_id = ab.id AND abo.owner_line_no = '1'
-			LEFT JOIN citizen c ON c.id = abo.owner_id
-			LEFT JOIN as_building_used abu ON abu.building_id = ab.id
-			LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id
-			LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
-			LEFT JOIN property_building_main_type pbmt ON pbmt.building_type_id = ab.property_building_main_type_id
-				AND pbmt.building_type_year = ab.building_type_year
-		WHERE ab.land_used_id = ? 
-			AND (ab.deleted_at IS NULL AND ab.deleted_by IS NULL)
-		ORDER BY ab.cutax_building_id ASC
-	`, landUsedID).Scan(&data).Error
+          ab.*,
+          abu.id AS building_used_id,
+          c.first_name,
+          c.last_name,
+          c.prefix_name_id,
+          c.person_type_id,
+          c.corporate_name,
+          pn."name" AS prefix_name,
+          pt.person_type_name,
+          pbmt.building_type_name,
+          abo.owner_line_no,
+          pt.person_type_name,
+          trim(
+            concat(
+              CASE
+                WHEN pt.person_type_id IS NOT NULL THEN concat('(', pt.person_type_name, ') ')
+                ELSE ''
+              END,
+              CASE
+                WHEN c.person_type_id = 1 THEN concat(pn."name", c.first_name, ' ', c.last_name)
+                WHEN c.person_type_id = 99 THEN c.corporate_name
+                ELSE concat(pn."name", ' ', c.corporate_name)
+              END
+          )) AS text_owner_prefix_fullname,
+          trim(
+            CASE
+              WHEN c.person_type_id = 1 THEN concat(pn."name", c.first_name, ' ', c.last_name)
+              WHEN c.person_type_id = 99 THEN c.corporate_name
+              ELSE concat(pn."name", ' ', c.corporate_name)
+            END
+          ) AS text_owner_fullname
+        FROM as_buildings ab
+          LEFT JOIN as_building_owners abo ON abo.building_id = ab.id AND abo.owner_line_no = '1' AND abo.muni_code = ?
+          LEFT JOIN citizen c ON c.id = abo.owner_id AND c.muni_code = ?
+          LEFT JOIN as_building_used abu ON abu.building_id = ab.id AND abu.muni_code = ?
+          LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id
+          LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
+          LEFT JOIN property_building_main_type pbmt ON pbmt.building_type_id = ab.property_building_main_type_id
+          	AND pbmt.muni_code = ?
+          	AND pbmt.building_type_year = ab.building_type_year
+        WHERE ab.land_used_id = ?
+          AND (ab.deleted_at IS NULL AND ab.deleted_by IS NULL)
+          AND ab.muni_code = ?
+        ORDER BY ab.cutax_building_id ASC
+	`, muniCode, muniCode, muniCode, muniCode, landUsedID, muniCode).Scan(&allBuildings).Error
 
 	if err != nil {
 		fmt.Println("Error fetching data:", err)
 		return []map[string]interface{}{}
 	}
 
-	if len(data) == 0 {
+	if len(allBuildings) == 0 {
 		return []map[string]interface{}{}
 	}
 
 	// Transform the result
-	for i := 0; i < len(data); i++ {
-		var allBuildOwners []map[string]interface{}
-
-		// Check if building has an ID
-		if buildingID, ok := data[i]["id"].(string); ok && buildingID != "" {
-			// Fetch building owners based on building ID
-			err := db.Raw(`
-				SELECT *
-				FROM as_building_owners
-				WHERE building_id = ?`, buildingID).Scan(&allBuildOwners).Error
-
-			if err != nil {
-				fmt.Println("Error fetching building owners:", err)
-				return []map[string]interface{}{}
-			}
-
-			// Fetch citizen data for each owner
-			for j := 0; j < len(allBuildOwners); j++ {
-				if ownerID, ok := allBuildOwners[j]["owner_id"].(string); ok && ownerID != "" {
-					var citizen models.Citizen
-					err := db.Where("id = ?", ownerID).First(&citizen).Error
-
-					if err != nil {
-						fmt.Println("Error fetching citizen data:", err)
-						return []map[string]interface{}{}
-					}
-
-					allBuildOwners[j]["citizen"] = citizen
-				}
-			}
+	for i := 0; i < len(allBuildings); i++ {
+		buildingId, ok := allBuildings[i]["id"].(string)
+		if ok {
+			var allBuildOwners = GetBuildingOwnersByBuildingId(buildingId, muniCode)
+			// Add building owners to the data
+			allBuildings[i]["building_owners"] = allBuildOwners
 		}
 
-		// Add building owners to the data
-		data[i]["buildingOwners"] = allBuildOwners
+		// Check if building has an ID
+		// if buildingID, ok := data[i]["id"].(string); ok && buildingID != "" {
+		// 	// Fetch building owners based on building ID
+		// 	err := db.Raw(`
+		// 		SELECT *
+		// 		FROM as_building_owners
+		// 		WHERE building_id = ?`, buildingID).Scan(&allBuildOwners).Error
+
+		// 	if err != nil {
+		// 		fmt.Println("Error fetching building owners:", err)
+		// 		return []map[string]interface{}{}
+		// 	}
+
+		// 	// Fetch citizen data for each owner
+		// 	for j := 0; j < len(allBuildOwners); j++ {
+		// 		if ownerID, ok := allBuildOwners[j]["owner_id"].(string); ok && ownerID != "" {
+		// 			var citizen models.Citizen
+		// 			err := db.Where("id = ?", ownerID).First(&citizen).Error
+
+		// 			if err != nil {
+		// 				fmt.Println("Error fetching citizen data:", err)
+		// 				return []map[string]interface{}{}
+		// 			}
+
+		// 			allBuildOwners[j]["citizen"] = citizen
+		// 		}
+		// 	}
+		// }
 	}
 
 	// Return the transformed result
-	return data
+	return allBuildings
 }
 
-func GetLandUsedsInfo(landID string) []map[string]interface{} {
-	var db = database.GetDB()
-	allLandUsed := GetLandUsedsWithoutBuildingOnLandByLandId(landID)
+func GetLandUsedsInfo(landID string, muniCode string) []map[string]interface{} {
+	allLandUsed := GetLandUsedsWithoutBuildingOnLandByLandId(landID, muniCode)
 
-	fmt.Println("allLandUsed ***>>>", allLandUsed)
+	// fmt.Println("allLandUsed ***>>>", allLandUsed)
 
 	if len(allLandUsed) == 0 {
 		return []map[string]interface{}{}
@@ -934,35 +1247,38 @@ func GetLandUsedsInfo(landID string) []map[string]interface{} {
 	// Fetch land used owners and citizens
 	fetchLandUsedOwners := func(i int) {
 		defer wg.Done()
-		var findAllAsLandUsedOwners []map[string]interface{}
-		err := db.Raw(`
-			SELECT * FROM as_land_used_owners aluo
-			WHERE aluo.land_used_id = ? AND aluo.deleted_at IS NULL
-		`, allLandUsed[i]["id"]).Scan(&findAllAsLandUsedOwners).Error
 
-		fmt.Println("allLandUsed[i] id ***>>>", allLandUsed[i]["id"])
-		fmt.Println("findAllAsLandUsedOwners ***>>>", findAllAsLandUsedOwners)
-		if err != nil {
-			fmt.Println("Error fetching as_land_used_owners:", err)
-			return
+		landUsedId, ok := allLandUsed[i]["id"].(string)
+		if ok {
+			var findAllAsLandUsedOwners = GetLandUsedOwnersByLandUsedId(landUsedId, muniCode)
+			// err := db.Raw(`
+			// 	SELECT * FROM as_land_used_owners aluo
+			// 	WHERE aluo.land_used_id = ? AND aluo.deleted_at IS NULL
+			// `, allLandUsed[i]["id"]).Scan(&findAllAsLandUsedOwners).Error
+
+			// fmt.Println("allLandUsed[i] id ***>>>", allLandUsed[i]["id"])
+			// fmt.Println("findAllAsLandUsedOwners ***>>>", findAllAsLandUsedOwners)
+			// if err != nil {
+			// 	fmt.Println("Error fetching as_land_used_owners:", err)
+			// 	return
+			// }
+			// for j := range findAllAsLandUsedOwners {
+			// 	citizen := fetchCitizens(findAllAsLandUsedOwners[j]["owner_id"])
+			// 	findAllAsLandUsedOwners[j]["citizen"] = citizen
+			// }
+
+			ownersMutex.Lock()
+			allLandUsed[i]["land_used_owners"] = findAllAsLandUsedOwners
+			ownersMutex.Unlock()
 		}
-
-		for j := range findAllAsLandUsedOwners {
-			citizen := fetchCitizens(findAllAsLandUsedOwners[j]["owner_id"])
-			findAllAsLandUsedOwners[j]["citizen"] = citizen
-		}
-
-		ownersMutex.Lock()
-		allLandUsed[i]["land_used_owners"] = findAllAsLandUsedOwners
-		ownersMutex.Unlock()
 	}
 
 	// Fetch building data
 	fetchBuildings := func(i int) {
 		defer wg.Done()
-		land_used_id, ok := allLandUsed[i]["id"].(string)
+		landUsedid, ok := allLandUsed[i]["id"].(string)
 		if ok {
-			buildings := GetLandUsedBuildingByLandUsedId(land_used_id)
+			buildings := GetLandUsedBuildingByLandUsedId(landUsedid, muniCode)
 			buildingsMutex.Lock()
 			allLandUsed[i]["buildings"] = buildings
 			buildingsMutex.Unlock()
@@ -1010,7 +1326,7 @@ func GetLandUsedsInfo(landID string) []map[string]interface{} {
 }
 
 // Fetch citizens for each land used owner
-func fetchCitizens(ownerID interface{}) []map[string]interface{} {
+func FetchCitizens(ownerID interface{}) []map[string]interface{} {
 	var db = database.GetDB()
 	var citizens []map[string]interface{}
 	citizenQuery := `
@@ -1143,4 +1459,260 @@ func fetchCitizens(ownerID interface{}) []map[string]interface{} {
 		fmt.Println("Error fetching citizen data:", err)
 	}
 	return citizens
+}
+
+func GetSignboardOwnersBySignboardId(signboardID string, muniCode string) []map[string]interface{} {
+	var db = database.GetDB()
+	query := `
+        SELECT
+          aso.id,
+          c.id AS owner_id,
+          c.sync_id,
+          c.person_type_id,
+          c.tax_id,
+          c.prefix_name_id,
+          c.first_name,
+          c.last_name,
+          c.phone_number,
+          c.line_id,
+          c.email,
+          c.address_house_number,
+          c.address_zone,
+          c.address_street,
+          c.address_alleyway,
+          (
+            CASE
+              WHEN length(c.address_province_code) = 2 THEN concat(mp.region_code, c.address_province_code)
+              ELSE c.address_province_code
+            END 
+          )AS address_province_code,
+          (
+            CASE
+              WHEN length(c.address_sub_district_code) = 6 THEN concat(mp.region_code, c.address_sub_district_code)
+              ELSE c.address_sub_district_code
+            END 
+          )AS address_sub_district_code,
+          (
+            CASE
+              WHEN length(c.address_district_code) = 4 THEN concat(mp.region_code, c.address_district_code)
+              ELSE c.address_district_code
+            END 
+          )AS address_district_code,
+          c.address_postcode,
+          c.created_at,
+          c.updated_at,
+          c.corporate_name,
+          c.codept4,
+          c.fax_no,
+          c.muni_code,
+          c.date_source,
+          c.citizen_id_check,
+          c.code_name,
+          c.current_address_house_number,
+          c.current_address_zone,
+          c.current_address_street,
+          c.current_address_alleyway,
+          (
+            CASE
+              WHEN length(c.current_address_province_code) = 2 THEN concat(mp.region_code, c.current_address_province_code)
+              ELSE c.current_address_province_code
+            END 
+          )AS current_address_province_code,
+          (
+            CASE
+              WHEN length(c.current_address_sub_district_code) = 6 THEN concat(mp.region_code, c.current_address_sub_district_code)
+              ELSE c.current_address_sub_district_code
+            END 
+          )AS current_address_sub_district_code,
+          (
+            CASE
+              WHEN length(c.current_address_district_code) = 4 THEN concat(mp.region_code, c.current_address_district_code)
+              ELSE c.current_address_district_code
+            END 
+          )AS current_address_district_code,
+          c.current_address_postcode,
+          c.is_same_address,
+          pt.person_type_name,
+          pn."name" AS prefix_name,
+          ms.province_name_t AS province_name,
+          ms.district_name_t AS district_name,
+          ms.subdistrict_name_t AS sub_district_name,
+          aso.owner_line_no,
+          (
+          trim(
+            CASE
+              WHEN pt.person_type_id = '1' THEN concat(pn."name", c.first_name, ' ', c.last_name)
+              WHEN pt.person_type_id = '99' THEN c.corporate_name
+              ELSE concat(pn."name", c.corporate_name)
+            END
+          )
+          ) AS text_full_name
+        FROM citizen c 
+          LEFT JOIN as_signboard_owners aso ON aso.owner_id = c.id AND aso.muni_code = ?
+          LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id 
+          LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
+          LEFT JOIN master_province mp ON 
+            CASE
+              WHEN c.is_same_address THEN 
+                CASE
+                  WHEN length(c.address_province_code) = 2 THEN mp.ad_province = c.address_province_code::NUMERIC 
+                  ELSE mp.province_code = c.address_province_code
+                END
+              ELSE 
+                CASE 
+                  WHEN length(c.current_address_province_code) = 2 THEN mp.ad_province = concat(mp.region_code , c.current_address_province_code)::NUMERIC 
+                  ELSE mp.province_code = c.current_address_province_code
+                END
+            END
+          LEFT JOIN master_district md ON 
+            CASE
+              WHEN c.is_same_address THEN 
+                CASE
+                  WHEN length(c.address_district_code) = 4 THEN md.district_code = concat(md.region_code, c.address_district_code)
+                  ELSE md.district_code = c.address_district_code 
+                END
+              ELSE 
+                CASE 
+                  WHEN length(c.current_address_district_code) = 4 THEN md.district_code = concat(md.region_code , c.current_address_district_code)
+                  ELSE md.district_code = c.current_address_district_code
+                END
+            END
+          LEFT JOIN master_subdistrict ms ON 
+            CASE
+              WHEN c.is_same_address THEN 
+                CASE
+                  WHEN length(c.address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code , c.address_sub_district_code)
+                  ELSE ms.subdistrict_code = c.address_sub_district_code
+                END
+              ELSE 
+                CASE 
+                  WHEN length(c.current_address_sub_district_code) = 6 THEN ms.subdistrict_code = concat(md.region_code , c.current_address_sub_district_code)
+                  ELSE ms.subdistrict_code = c.current_address_sub_district_code
+                END
+            END
+        WHERE aso.signboard_id = ? 
+          AND (aso.deleted_at IS NULL AND aso.deleted_by IS NULL)
+          AND aso.muni_code = ?
+          AND c.muni_code = ?
+        ORDER BY aso.owner_line_no
+      `
+	var signboardOwners = []map[string]interface{}{}
+	err := db.Raw(query, muniCode, signboardID, muniCode, muniCode).Scan(&signboardOwners).Error
+	if err != nil {
+		fmt.Println("error getting signboard owners: %w", err)
+		return []map[string]interface{}{}
+	}
+
+	return signboardOwners
+}
+
+func GetAllSignboardsOnLandByLandID(landID string, muniCode string) []map[string]interface{} {
+	var db = database.GetDB()
+	var landSignboards = []map[string]interface{}{}
+
+	query := `
+	SELECT
+          as2.id,
+          as2.land_id,
+          as2.signboard_text,
+          as2.signboard_width,
+          as2.signboard_height,
+          as2.signboard_side,
+          as2.signboard_total_area,
+          as2.signboard_unit_total,
+          as2.property_signboard_type_id,
+          as2.property_signboard_display_type_id,
+          as2.note,
+          as2.map_lat,
+          as2.map_long,
+          as2.signboard_setup_date,
+          as2.parcel_code,
+          as2.address_place_number,
+          as2.address_zone,
+          as2.address_alley_way,
+          as2.address_street,
+          as2.address_sub_district_id,
+          as2.muni_code,
+          as2.utm_map1,
+          as2.utm_map2,
+          as2.utm_map3,
+          as2.tax_year,
+          as2.cutax_label_id,
+          as2.sync_id,
+          as2.created_at,
+          as2.created_by,
+          as2.updated_at,
+          as2.updated_by,
+          as2.deleted_at,
+          as2.deleted_by,
+          as2.cancel_status,
+          as2.cancel_date,
+          as2.cancel_by,
+          as2.cancel_at,
+          pst.signboard_type_id,
+          pst.signboard_type_name,
+          psdt.property_signboard_display_type,
+          psdt.property_signboard_display_name,
+          psdt.property_signboard_display_desc,
+          trim(concat(pst.signboard_type_id, substring(psdt.property_signboard_display_desc, 1, POSITION(' ' IN psdt.property_signboard_display_desc) - 1))) AS text_signboard_type,
+          pt.person_type_name,
+          trim(
+            concat(
+              CASE
+                WHEN pt.person_type_id IS NOT NULL THEN concat('(', pt.person_type_name, ') ')
+                ELSE ''
+              END,
+              CASE
+                WHEN c.person_type_id = 1 THEN concat(pn."name", c.first_name, ' ', c.last_name)
+                WHEN c.person_type_id = 99 THEN c.corporate_name
+                ELSE concat(pn."name", ' ', c.corporate_name)
+              END
+          )) AS text_owner_prefix_fullname,
+          trim(
+            CASE
+              WHEN c.person_type_id = 1 THEN concat(pn."name", c.first_name, ' ', c.last_name)
+              WHEN c.person_type_id = 99 THEN c.corporate_name
+              ELSE concat(pn."name", ' ', c.corporate_name)
+            END
+          ) AS text_owner_fullname
+          FROM as_signboards as2
+            LEFT JOIN property_signboard_type pst ON pst.signboard_type_id = as2.property_signboard_type_id
+            LEFT JOIN property_signboard_display_type psdt ON psdt.property_signboard_display_type = as2.property_signboard_display_type_id
+            LEFT JOIN as_signboard_owners aso ON aso.signboard_id = as2.id
+              AND aso.owner_line_no = '1'
+              AND aso.deleted_at IS NULL
+              AND aso.deleted_by IS NULL
+              AND aso.muni_code = ?
+            LEFT JOIN citizen c ON c.id = aso.owner_id AND c.muni_code = ?
+            LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id
+            LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
+          WHERE as2.land_id = ?
+            AND (as2.deleted_at IS NULL AND as2.deleted_by IS NULL)
+            AND as2.muni_code = ?
+          ORDER BY as2.cutax_label_id ASC`
+
+	// Execute the query
+	if err := db.Raw(query, muniCode, muniCode, landID, muniCode).Scan(&landSignboards).Error; err != nil {
+		fmt.Println("failed to fetch land signboards: %w", err)
+		return []map[string]interface{}{}
+	}
+
+	if len(landSignboards) == 0 {
+		return []map[string]interface{}{}
+	}
+
+	// Fetch and merge images and owners
+	for i, signboard := range landSignboards {
+		signboardId := signboard["id"].(string)
+
+		// Get images
+		images := GetAssetAttachmentLatestSurveyByAssetId(signboardId, landID)
+		landSignboards[i]["asset_images"] = images
+
+		// Get owners
+		owners := GetSignboardOwnersBySignboardId(signboardId, muniCode)
+		landSignboards[i]["signboard_owners"] = owners
+	}
+
+	return landSignboards
 }
