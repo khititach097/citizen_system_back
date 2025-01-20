@@ -443,6 +443,17 @@ func GetAssetByLandId(landId string) (map[string]interface{}, error) {
 	return response, nil
 }
 
+func GetAssetByCondoId(condoId string) (map[string]interface{}, error) {
+
+	latestSurveyRequest := survey_request_survices.FindLatestSurveyRequestByAssetId(condoId, "", "")
+
+	response := map[string]interface{}{
+		"latest_survey_request": latestSurveyRequest,
+	}
+
+	return response, nil
+}
+
 func GetLandInfoDetailByLandId(landId string) map[string]interface{} {
 	var db = database.GetDB()
 	query := `

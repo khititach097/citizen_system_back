@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"net/http"
 
+	"citizen_system_back/database"
+	"citizen_system_back/models"
 	asset_services "citizen_system_back/modules/assets/services"
 	asset_types "citizen_system_back/modules/assets/types"
 	"citizen_system_back/utils/response"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -165,20 +168,54 @@ func GetAssetByUserID() gin.HandlerFunc {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param land_id path string true "Land ID"
+// @Param asset_id path string true "Land ID or Condo ID"
 // @Success 200 {object} response.Response
 // @Failure 400 {object} response.Response
 // @Failure 500 {object} response.Response
-// @Router /api/v1/assets/get_asset_by_land_id/{land_id} [get]
+// @Router /api/v1/assets/get_asset_by_asset_id/{asset_id} [get]
 func GetAssetByLandID() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		landId := c.Param("land_id")
-		if landId == "" {
-			c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid land_id", errors.New("land_id cannot be empty")))
+		var db = database.GetDB()
+		assetId := c.Param("asset_id")
+		if assetId == "" {
+			c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid asset id", errors.New("asset id cannot be empty")))
 			return
 		}
 
-		asset, err := asset_services.GetAssetByLandId(landId)
+		// Parse assetId into UUID
+		assetUUID, err := uuid.Parse(assetId)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid asset id format", err))
+			return
+		}
+
+		// Check if asset exists in AsLands
+		var landCount int64
+		isExistOnLand := false
+		err = db.Model(&models.AsLands{}).Where("id = ?", assetUUID).Count(&landCount).Error
+		if err == nil && landCount > 0 {
+			isExistOnLand = true
+		}
+
+		// Check if asset exists in AsCondos
+		var condoCount int64
+		isExistOnCondo := false
+		err = db.Model(&models.AsCondos{}).Where("id = ?", assetUUID).Count(&condoCount).Error
+		if err == nil && condoCount > 0 {
+			isExistOnCondo = true
+		}
+
+		var asset map[string]interface{}
+
+		if isExistOnLand {
+			asset, err = asset_services.GetAssetByLandId(assetId)
+		} else if isExistOnCondo {
+			asset, err = asset_services.GetAssetByCondoId(assetId)
+		} else {
+			c.JSON(http.StatusBadRequest, response.NewErrorResponse("Invalid asset id", errors.New("Not found asset on land and condo")))
+			return
+		}
+
 		if err != nil {
 			switch {
 			case errors.Is(err, gorm.ErrRecordNotFound):

@@ -17,6 +17,6 @@ func RegisterAssetRoutes(router *gin.RouterGroup) {
 		// router.GET("/assets", middleware.AuthMiddleware, asset_controllers.ListAssets())
 		assetGroup.GET("/:id", asset_controllers.GetAssetByID())
 		assetGroup.GET("/get_asset_by_user_id/:user_id", asset_controllers.GetAssetByUserID())
-		assetGroup.GET("/get_asset_by_land_id/:land_id", asset_controllers.GetAssetByLandID())
+		assetGroup.GET("/get_asset_by_asset_id/:asset_id", asset_controllers.GetAssetByLandID())
 	}
 }
