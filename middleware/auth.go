@@ -2,7 +2,6 @@ package middleware
 
 import (
 	users_services "citizen_system_back/modules/users/services"
-	"citizen_system_back/utils/bedrock_auth"
 	"fmt"
 	"time"
 
@@ -27,26 +26,31 @@ type AuthResponse struct {
 // AuthMiddleware checks user authentication by sending an API request to the auth service.
 func AuthMiddleware(c *gin.Context) {
 	// Extract the Authorization header
-	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is missing"})
-		c.Abort()
-		return
-	}
+	// authHeader := c.GetHeader("Authorization")
+	// if authHeader == "" {
+	// 	c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is missing"})
+	// 	c.Abort()
+	// 	return
+	// }
 
-	// Attempt to get profile using the provided Authorization header
-	result, err := bedrock_auth.GetProfile(authHeader)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request to auth service"})
-		c.Abort()
-		return
-	}
+	// // Attempt to get profile using the provided Authorization header
+	// result, err := bedrock_auth.GetProfile(authHeader)
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request to auth service"})
+	// 	c.Abort()
+	// 	return
+	// }
 
 	// Process User from auth
-	go users_services.UpSertProfileCitizenUser(result)
-
+	user, errUser := users_services.GetUserByEmail()
+	if errUser != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user data"})
+		c.Abort()
+		return
+	}
+	fmt.Println("User Profile from middleware:", user)
 	// Proceed with the request
-	c.Set("profile", result)
+	c.Set("profile", user)
 	c.Next()
 }
 

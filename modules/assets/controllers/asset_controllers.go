@@ -29,13 +29,14 @@ import (
 func ListAssets() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		// profile, exists := c.Get("profile")
-		// if !exists {
-		// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Profile information is missing"})
-		// 	return
-		// }
-		// // Use the profile information
-		// fmt.Println("Profile from middleware:", profile)
+		profile, exists := c.Get("profile")
+		fmt.Println("Profile from middleware:", profile)
+		if !exists {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Profile information is missing"})
+			return
+		}
+		// Use the profile information
+		fmt.Println("Profile from middleware:", profile)
 
 		// Parse pagination parameters
 		page := 1
