@@ -77,15 +77,15 @@ paths:
       summary: Get asset by ID
       tags:
       - assets
-  /api/v1/assets/get_asset_by_land_id/{land_id}:
+  /api/v1/assets/get_asset_by_asset_id/{asset_id}:
     get:
       consumes:
       - application/json
       description: Get all asset with land id
       parameters:
-      - description: Land ID
+      - description: Land ID or Condo ID
         in: path
-        name: land_id
+        name: asset_id
         required: true
         type: string
       produces:

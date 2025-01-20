@@ -3,6 +3,7 @@ package main
 import (
 	"citizen_system_back/database"
 	routes "citizen_system_back/modules"
+	"time"
 
 	// "citizen_system_back/middleware"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	_ "citizen_system_back/docs"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
@@ -48,6 +50,15 @@ func main() {
 
 	// Initialize Gin router
 	router := gin.Default()
+
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"}, // Replace with your frontend's origin
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Authorization", "Content-Type"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true, // Enable credentials
+		MaxAge:           12 * time.Hour,
+	}))
 
 	// Swagger endpoint at /api/v1/docs
 	router.GET("/api/v1/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

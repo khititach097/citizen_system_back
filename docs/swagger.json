@@ -47,7 +47,7 @@
                 }
             }
         },
-        "/api/v1/assets/get_asset_by_land_id/{land_id}": {
+        "/api/v1/assets/get_asset_by_asset_id/{asset_id}": {
             "get": {
                 "security": [
                     {
@@ -68,8 +68,8 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Land ID",
-                        "name": "land_id",
+                        "description": "Land ID or Condo ID",
+                        "name": "asset_id",
                         "in": "path",
                         "required": true
                     }
