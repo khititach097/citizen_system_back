@@ -188,6 +188,39 @@ paths:
       summary: Generate model
       tags:
       - dev_tools
+  /api/v1/s3/preview/{img_id}:
+    get:
+      consumes:
+      - application/json
+      description: Preview image by img id
+      parameters:
+      - description: The UUID (PK) of image id
+        in: path
+        name: img_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Preview image
+      tags:
+      - s3
 securityDefinitions:
   BearerAuth:
     in: header
