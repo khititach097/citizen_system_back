@@ -1077,8 +1077,9 @@ func GetLandUsedsWithoutBuildingOnLandByLandId(landID string, muniCode string) [
 	// Fetch the data using GORM
 	err := db.Raw(`
        SELECT
-          alu.*
+          alu.*, put.using_type_detail 
         FROM as_land_used alu
+        LEFT JOIN property_using_type put on alu.using_type_id = put.using_type_id 
         WHERE alu.land_id =?
           AND (alu.deleted_at IS NULL AND alu.deleted_by IS NULL)
           AND alu.muni_code = ?
