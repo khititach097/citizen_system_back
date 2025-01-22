@@ -967,6 +967,38 @@ func GetBuildingOwnersByBuildingId(buildingId string, muniCode string) []map[str
 
 	return landOwners
 }
+func GetBuildingUsedByBuildingUsedId(buildingUsedId string) []map[string]interface{} {
+	var db = database.GetDB()
+
+	query := `
+        SELECT 
+						abu.*, 
+						prt.rent_type_detail, 
+						put.using_type_detail, 
+						pht.household_type_name
+				FROM 
+						as_building_used abu
+				LEFT JOIN 
+						property_using_type put 
+						ON abu.building_using_type_id = put.using_type_id
+				LEFT JOIN 
+						property_rent_type prt 
+						ON abu.property_rent_type_id = prt.rent_type_id
+				LEFT JOIN 
+						property_household_type pht 
+						ON abu.building_household_type_id = pht.household_type_id
+				WHERE 
+						abu.id = ?;
+    `
+	var buildingUsed = []map[string]interface{}{}
+	result := db.Raw(query, buildingUsedId).Scan(&buildingUsed)
+	if result.Error != nil {
+		fmt.Println("Error fetching data:", result.Error)
+		return []map[string]interface{}{}
+	}
+
+	return buildingUsed
+}
 
 func GetAdjoiningLandDetailListByLandID(landID string, muniCode string) []map[string]interface{} {
 	var db = database.GetDB()
@@ -1160,9 +1192,11 @@ func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[s
           c.corporate_name,
           pn."name" AS prefix_name,
           pt.person_type_name,
-          pbmt.building_type_name,
+          pbmt.building_type_name as building_main_type_name,
           abo.owner_line_no,
           pt.person_type_name,
+					pbst.building_type_name as building_sub_type_name,
+					pbdt.building_design_type_name,
           trim(
             concat(
               CASE
@@ -1191,11 +1225,15 @@ func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[s
           LEFT JOIN property_building_main_type pbmt ON pbmt.building_type_id = ab.property_building_main_type_id
           	AND pbmt.muni_code = ?
           	AND pbmt.building_type_year = ab.building_type_year
+					LEFT JOIN property_building_sub_type pbst on pbst.building_sub_id = ab.property_building_sub_type_id 
+         AND pbst.muni_code = ?
+         AND pbst.building_type_year = ab.building_type_year
+				 LEFT JOIN property_building_design_type pbdt on pbdt.building_design_type_id = ab.building_design_type_id
         WHERE ab.land_used_id = ?
           AND (ab.deleted_at IS NULL AND ab.deleted_by IS NULL)
           AND ab.muni_code = ?
         ORDER BY ab.cutax_building_id ASC
-	`, muniCode, muniCode, muniCode, muniCode, landUsedID, muniCode).Scan(&allBuildings).Error
+	`, muniCode, muniCode, muniCode, muniCode, muniCode, landUsedID, muniCode).Scan(&allBuildings).Error
 
 	// fmt.Println("allBuildings ***>>>", allBuildings)
 	if err != nil {
@@ -1214,6 +1252,17 @@ func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[s
 			var allBuildOwners = GetBuildingOwnersByBuildingId(buildingId, muniCode)
 			// Add building owners to the data
 			allBuildings[i]["building_owners"] = allBuildOwners
+
+			var buildingUsed = []map[string]interface{}{}
+			var buildingUsedId, ok = allBuildings[i]["building_used_id"].(string)
+			if ok {
+				buildingUsed = GetBuildingUsedByBuildingUsedId(buildingUsedId)
+			}
+			if len(buildingUsed) > 0 {
+				allBuildings[i]["building_used"] = buildingUsed[0]
+			} else {
+				allBuildings[i]["building_used"] = []map[string]interface{}{}
+			}
 		}
 
 	}
@@ -1579,7 +1628,7 @@ func GetAllSignboardsOnLandByLandID(landID string, muniCode string) []map[string
 	var landSignboards = []map[string]interface{}{}
 
 	query := `
-	SELECT
+			SELECT
           as2.id,
           as2.land_id,
           as2.signboard_text,
@@ -1617,6 +1666,9 @@ func GetAllSignboardsOnLandByLandID(landID string, muniCode string) []map[string
           as2.cancel_date,
           as2.cancel_by,
           as2.cancel_at,
+					as2.address_village_name,
+					as2.address_postcode ,
+					as2.signboard_name ,
           pst.signboard_type_id,
           pst.signboard_type_name,
           psdt.property_signboard_display_type,
@@ -1642,7 +1694,10 @@ func GetAllSignboardsOnLandByLandID(landID string, muniCode string) []map[string
               WHEN c.person_type_id = 99 THEN c.corporate_name
               ELSE concat(pn."name", ' ', c.corporate_name)
             END
-          ) AS text_owner_fullname
+          ) AS text_owner_fullname,
+          md.province_name_t AS province_name,
+					md.district_name_t AS district_name,
+					ms.subdistrict_name_t AS subdistrict_name
           FROM as_signboards as2
             LEFT JOIN property_signboard_type pst ON pst.signboard_type_id = as2.property_signboard_type_id
             LEFT JOIN property_signboard_display_type psdt ON psdt.property_signboard_display_type = as2.property_signboard_display_type_id
@@ -1654,6 +1709,8 @@ func GetAllSignboardsOnLandByLandID(landID string, muniCode string) []map[string
             LEFT JOIN citizen c ON c.id = aso.owner_id AND c.muni_code = ?
             LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id
             LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
+            LEFT JOIN master_district md ON md.district_code::numeric = as2.address_district_id 
+            LEFT JOIN master_subdistrict ms ON as2.address_sub_district_id::text = ms.subdistrict_code
           WHERE as2.land_id = ?
             AND (as2.deleted_at IS NULL AND as2.deleted_by IS NULL)
             AND as2.muni_code = ?
