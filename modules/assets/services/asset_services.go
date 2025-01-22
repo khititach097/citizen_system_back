@@ -1197,6 +1197,7 @@ func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[s
         ORDER BY ab.cutax_building_id ASC
 	`, muniCode, muniCode, muniCode, muniCode, landUsedID, muniCode).Scan(&allBuildings).Error
 
+	// fmt.Println("allBuildings ***>>>", allBuildings)
 	if err != nil {
 		fmt.Println("Error fetching data:", err)
 		return []map[string]interface{}{}
@@ -1215,34 +1216,6 @@ func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[s
 			allBuildings[i]["building_owners"] = allBuildOwners
 		}
 
-		// Check if building has an ID
-		// if buildingID, ok := data[i]["id"].(string); ok && buildingID != "" {
-		// 	// Fetch building owners based on building ID
-		// 	err := db.Raw(`
-		// 		SELECT *
-		// 		FROM as_building_owners
-		// 		WHERE building_id = ?`, buildingID).Scan(&allBuildOwners).Error
-
-		// 	if err != nil {
-		// 		fmt.Println("Error fetching building owners:", err)
-		// 		return []map[string]interface{}{}
-		// 	}
-
-		// 	// Fetch citizen data for each owner
-		// 	for j := 0; j < len(allBuildOwners); j++ {
-		// 		if ownerID, ok := allBuildOwners[j]["owner_id"].(string); ok && ownerID != "" {
-		// 			var citizen models.Citizen
-		// 			err := db.Where("id = ?", ownerID).First(&citizen).Error
-
-		// 			if err != nil {
-		// 				fmt.Println("Error fetching citizen data:", err)
-		// 				return []map[string]interface{}{}
-		// 			}
-
-		// 			allBuildOwners[j]["citizen"] = citizen
-		// 		}
-		// 	}
-		// }
 	}
 
 	// Return the transformed result
@@ -1252,14 +1225,12 @@ func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[s
 func GetLandUsedsInfo(landID string, muniCode string) []map[string]interface{} {
 	allLandUsed := GetLandUsedsWithoutBuildingOnLandByLandId(landID, muniCode)
 
-	// fmt.Println("allLandUsed ***>>>", allLandUsed)
-
 	if len(allLandUsed) == 0 {
 		return []map[string]interface{}{}
 	}
 
 	var wg sync.WaitGroup
-	var ownersMutex, buildingsMutex, imagesMutex sync.Mutex
+	var ownersMutex, imagesMutex sync.Mutex
 
 	// Fetch land used owners and citizens
 	fetchLandUsedOwners := func(i int) {
@@ -1267,22 +1238,7 @@ func GetLandUsedsInfo(landID string, muniCode string) []map[string]interface{} {
 
 		landUsedId, ok := allLandUsed[i]["id"].(string)
 		if ok {
-			var findAllAsLandUsedOwners = GetLandUsedOwnersByLandUsedId(landUsedId, muniCode)
-			// err := db.Raw(`
-			// 	SELECT * FROM as_land_used_owners aluo
-			// 	WHERE aluo.land_used_id = ? AND aluo.deleted_at IS NULL
-			// `, allLandUsed[i]["id"]).Scan(&findAllAsLandUsedOwners).Error
-
-			// fmt.Println("allLandUsed[i] id ***>>>", allLandUsed[i]["id"])
-			// fmt.Println("findAllAsLandUsedOwners ***>>>", findAllAsLandUsedOwners)
-			// if err != nil {
-			// 	fmt.Println("Error fetching as_land_used_owners:", err)
-			// 	return
-			// }
-			// for j := range findAllAsLandUsedOwners {
-			// 	citizen := fetchCitizens(findAllAsLandUsedOwners[j]["owner_id"])
-			// 	findAllAsLandUsedOwners[j]["citizen"] = citizen
-			// }
+			findAllAsLandUsedOwners := GetLandUsedOwnersByLandUsedId(landUsedId, muniCode)
 
 			ownersMutex.Lock()
 			allLandUsed[i]["land_used_owners"] = findAllAsLandUsedOwners
@@ -1290,51 +1246,46 @@ func GetLandUsedsInfo(landID string, muniCode string) []map[string]interface{} {
 		}
 	}
 
-	// Fetch building data
-	fetchBuildings := func(i int) {
-		defer wg.Done()
+	// Fetch building data first, synchronously for each land use
+	for i := range allLandUsed {
 		landUsedid, ok := allLandUsed[i]["id"].(string)
 		if ok {
 			buildings := GetLandUsedBuildingByLandUsedId(landUsedid, muniCode)
-			buildingsMutex.Lock()
 			allLandUsed[i]["buildings"] = buildings
-			buildingsMutex.Unlock()
 		}
 	}
 
 	// Fetch images for land used and buildings
 	fetchImages := func(i int) {
 		defer wg.Done()
-		land_used_id, ok := allLandUsed[i]["id"].(string)
+
+		// Fetch land used images
+		landUsedId, ok := allLandUsed[i]["id"].(string)
 		if ok {
-			imagesLandUsed := GetAssetAttachmentLatestSurveyByAssetId(land_used_id, landID)
+			imagesLandUsed := GetAssetAttachmentLatestSurveyByAssetId(landUsedId, landID)
 			imagesMutex.Lock()
 			allLandUsed[i]["asset_images"] = imagesLandUsed
 			imagesMutex.Unlock()
 		}
 
-		if buildings, ok := allLandUsed[i]["buildings"].([]map[string]interface{}); ok && len(buildings) > 0 {
-			var imageBuildings []asset_types.AssetAttachment
-			for _, building := range buildings {
-				building_id, ok := building["id"].(string)
-				if ok {
-					imageBuildings = append(imageBuildings, GetAssetAttachmentLatestSurveyByAssetId(building_id, landID)...)
+		// Fetch building images
+		if buildings, ok := allLandUsed[i]["buildings"].([]map[string]interface{}); ok {
+			for j, building := range buildings {
+				if buildingId, ok := building["id"].(string); ok {
+					buildingImages := GetAssetAttachmentLatestSurveyByAssetId(buildingId, landID)
+
+					imagesMutex.Lock()
+					allLandUsed[i]["buildings"].([]map[string]interface{})[j]["asset_images"] = buildingImages
+					imagesMutex.Unlock()
 				}
 			}
-
-			imagesMutex.Lock()
-			for j := range buildings {
-				allLandUsed[i]["buildings"].([]map[string]interface{})[j]["asset_images"] = imageBuildings[j]
-			}
-			imagesMutex.Unlock()
 		}
 	}
 
-	// Start all goroutines
+	// Start goroutines for owners and images
 	for i := range allLandUsed {
-		wg.Add(3) // Three goroutines per land used: owners, buildings, images
+		wg.Add(2) // Two goroutines per land used: owners and images
 		go fetchLandUsedOwners(i)
-		go fetchBuildings(i)
 		go fetchImages(i)
 	}
 	wg.Wait()
