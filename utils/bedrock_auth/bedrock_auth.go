@@ -28,7 +28,7 @@ func ConnectionV3() Config {
 		Host:         os.Getenv("AUTH_HOST"),
 		ClientID:     os.Getenv("AUTH_CLIENT_ID"),
 		ClientSecret: os.Getenv("AUTH_CLIENT_SECRET"),
-		UserType:     "Citizen",
+		UserType:     "officer",
 	}
 }
 
@@ -65,17 +65,19 @@ func GetProfile(cookieHeader string) (asset_types.Profile, error) {
 	if err != nil {
 		return asset_types.Profile{}, fmt.Errorf("failed to read response: %w", err)
 	}
+	bodyStr := string(body)
+	fmt.Println("****** Get Profile Body: ", bodyStr)
 
-	fmt.Println(" ****** get profile body : ", body)
 	// Parse the JSON response into a map
 	var authResp AuthResponse
 	err = json.Unmarshal(body, &authResp)
 	if err != nil {
+		fmt.Println(" ****** failed to parse JSON : ", err)
 		return asset_types.Profile{}, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
 	// Log the JSON response for debugging
-	fmt.Println(" ****** get profile profile : ", authResp)
+	fmt.Println(" ****** get profile profile : ", authResp.Profile)
 
 	return authResp.Profile, nil
 }

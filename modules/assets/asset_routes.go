@@ -8,7 +8,6 @@ import (
 
 // RegisterAssetRoutes registers routes for asset-related operations
 // @Security BearerAuth
-// @Security CookieAuth
 func RegisterAssetRoutes(router *gin.RouterGroup) {
 
 	assetGroup := router.Group("/assets") // Corrected variable name

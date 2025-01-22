@@ -1,10 +1,5 @@
 package users_types
 
-type User struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-}
-
 // Profile structure contains user profile details.
 //
 //	type Profile struct {
@@ -28,6 +23,7 @@ type Profile struct {
 	NationalID   string  `json:"nationalId"`
 	PassportNo   *string `json:"passportNo"` // Can be null, so pointer type is used
 	Status       string  `json:"status"`
+	// Accounts     []Account `json:"accounts"`
 }
 
 // Account represents a user account linked to the profile.

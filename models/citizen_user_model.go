@@ -8,7 +8,7 @@ import (
 
 // CitizenUser represents the structure of the citizen_user table
 type CitizenUser struct {
-	Id           uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Id           *uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
 	UserEmail    string     `gorm:"column:user_email" json:"user_email"`
 	Password     *string    `gorm:"column:password" json:"password"`
 	UserTel      *string    `gorm:"column:user_tel" json:"user_tel"`
