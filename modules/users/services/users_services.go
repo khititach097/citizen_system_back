@@ -268,16 +268,19 @@ func UpdateCitizenByTaxIdAndName(authUser *AuthServiceResponse) {
 	}
 }
 
-func GetProfile() string {
+func GetProfile(citizen models.CitizenUser) (models.CitizenUser, error) {
 
-	// // todo: find user citizen
-	// errFindCitizen := db.Find(&citizen).Where("citizen_id = ? ", response.Data.ID).Error
-	// if errFindCitizen != nil {
-	// 	fmt.Println("errFindCitizen : ", errFindCitizen)
-	// 	return asset_types.Profile{}, fmt.Errorf("failed to upsert user: %w", errors.New("error test"))
-	// }
+	// todo: find user citizen
+	var db = database.GetDB()
+	var citizenUser models.CitizenUser
+	// errFindCitizen := db.Find(&citizenUser).Where("id = ? ", "8fc7264f-e610-4541-934e-37bddcbaacf2").Error
+	errFindCitizen := db.Find(&citizenUser).Where("id = ? ", citizen.Id).Error
+	if errFindCitizen != nil {
+		fmt.Println("errFindCitizen : ", errFindCitizen)
+		return models.CitizenUser{}, fmt.Errorf("failed to upsert user: %w", errors.New("error test"))
+	}
 
-	fmt.Println("data CitizenUser:")
+	fmt.Println("data CitizenUser:", citizenUser)
 
-	return "test"
+	return citizenUser, nil
 }
