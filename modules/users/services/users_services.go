@@ -83,8 +83,9 @@ func MockAuthUserData() *AuthServiceResponse {
 			Picture:      nil,
 			DocumentType: "nationalId",
 			NationalID:   "5546751829457",
-			PassportNo:   nil,
-			Status:       "active",
+			// NationalID: "",
+			PassportNo: nil,
+			Status:     "active",
 			// Accounts: []Account{
 			// 	{
 			// 		Provider: "email",
@@ -123,9 +124,6 @@ func UpSertProfileCitizenUser(profile asset_types.Profile) (models.CitizenUser, 
 	}
 
 	// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! mock data !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-	// return response.Data, nil
-
 	fmt.Println("response:", response)
 
 	var db = database.GetDB()
@@ -139,31 +137,27 @@ func UpSertProfileCitizenUser(profile asset_types.Profile) (models.CitizenUser, 
 		return models.CitizenUser{}, fmt.Errorf("failed to upsert user: %w", errors.New("error test"))
 	}
 
-	fmt.Println("citizenUser :  ", citizenUser)
-
-	// todo: build model data CitizenUser
-	newCitizenUser := models.CitizenUser{}
-
-	active := true
-	CreatedBy := "system"
-	now := time.Now()
-	id, err := uuid.Parse(response.Data.ID)
-	if err != nil {
-		panic("Invalid UUID format")
-	}
-	newCitizenUser.Id = &id
-	newCitizenUser.UserTel = &response.Data.PhoneNumber
-	newCitizenUser.Active = &active
-	newCitizenUser.UserName = &response.Data.FirstName
-	newCitizenUser.UserLastName = &response.Data.LastName
-	newCitizenUser.CreatedAt = &now
-	newCitizenUser.CreatedBy = &CreatedBy
-
-	fmt.Println("newCitizenUser :  ", &newCitizenUser)
-
 	// todo: not found citizen user
 	if len(citizenUser) == 0 {
 		fmt.Println(" *********** citizenUser not found user data *********** ")
+
+		// todo: build model data CitizenUser
+		newCitizenUser := models.CitizenUser{}
+
+		active := true
+		CreatedBy := "system"
+		now := time.Now()
+		id, err := uuid.Parse(response.Data.ID)
+		if err != nil {
+			panic("Invalid UUID format")
+		}
+		newCitizenUser.Id = &id
+		newCitizenUser.UserTel = &response.Data.PhoneNumber
+		newCitizenUser.Active = &active
+		newCitizenUser.UserName = &response.Data.FirstName
+		newCitizenUser.UserLastName = &response.Data.LastName
+		newCitizenUser.CreatedAt = &now
+		newCitizenUser.CreatedBy = &CreatedBy
 
 		// todo: open transaction
 		tx := db.Begin()
@@ -182,7 +176,7 @@ func UpSertProfileCitizenUser(profile asset_types.Profile) (models.CitizenUser, 
 		}
 
 		// todo: Commit the transaction
-		if errCommit := tx.Rollback().Error; errCommit != nil {
+		if errCommit := tx.Commit().Error; errCommit != nil { // !!!!!! change tx.Rollback() >>> tx.commit()
 			return models.CitizenUser{}, fmt.Errorf("failed to commit transaction: %w", errCommit)
 		}
 
@@ -191,7 +185,7 @@ func UpSertProfileCitizenUser(profile asset_types.Profile) (models.CitizenUser, 
 		// found citizen user
 		fmt.Println(" *********** citizenUser found user data *********** ")
 
-		// errCitizen := tx.Find(&citizen).Where("tax_id = ?", response.Data.NationalID).Error
+		// errCitizen := db.Where("tax_id = ?", response.Data.NationalID).Find(&citizen).Error
 		// if errCitizen != nil {
 		// 	fmt.Println("errCitizen : ", errCitizen)
 		// 	tx.Rollback() // Rollback the transaction on error
@@ -210,25 +204,68 @@ func UpSertProfileCitizenUser(profile asset_types.Profile) (models.CitizenUser, 
 
 		// fmt.Println("citizen:", citizen)
 	}
-	fmt.Println(" 213 ******* newCitizenUser ******* :", &newCitizenUser)
-	fmt.Println(" 214 ******* newCitizenUser.UserName ******* :", *newCitizenUser.UserName)
 
 	// todo: update citizen (Field : citizen_id)
-	go UpdateCitizenIdInCitizen(&newCitizenUser)
+	go UpdateCitizenByTaxIdAndName(response)
 
-	return newCitizenUser, nil
+	return citizenUser[0], nil
 }
 
-func UpdateCitizenIdInCitizen(CitizenUser *models.CitizenUser) {
+func UpdateCitizenByTaxIdAndName(authUser *AuthServiceResponse) {
 
-	// // todo: find user citizen
-	// errFindCitizen := db.Find(&citizen).Where("citizen_id = ? ", response.Data.ID).Error
-	// if errFindCitizen != nil {
-	// 	fmt.Println("errFindCitizen : ", errFindCitizen)
-	// 	return asset_types.Profile{}, fmt.Errorf("failed to upsert user: %w", errors.New("error test"))
-	// }
+	fmt.Println(" 214 ******* UpdateCitizenIdInCitizen authUser ******* :", authUser.Data)
+	fmt.Println(" 214 ******* UpdateCitizenIdInCitizen authUser ******* :", authUser.Data.NationalID)
 
-	fmt.Println("data CitizenUser:", CitizenUser)
+	// todo: Get database connection
+	var db = database.GetDB()
+
+	// todo: find user citizen
+	var citizens []models.Citizen
+	query := db.Debug().Model(&models.Citizen{})
+	// Add condition for NationalID if provided
+	if authUser.Data.NationalID != "" {
+		fmt.Println(" **** authUser.Data.NationalID isn't MT")
+		// query = query.Where("tax_id = ?", authUser.Data.NationalID)
+		query = db.Where("(tax_id = ? OR (first_name = ? AND last_name = ?)) AND citizen_id IS NULL",
+			authUser.Data.NationalID,
+			authUser.Data.FirstName,
+			authUser.Data.LastName)
+	}
+
+	// Add condition for FirstName and LastName if provided
+	if authUser.Data.FirstName != "" && authUser.Data.LastName != "" {
+		fmt.Println(" **** authUser.Data.FirstName authUser.Data.LastName isn't MT")
+		// query = query.Or("first_name = ? AND last_name = ?", authUser.Data.FirstName, authUser.Data.LastName)
+		query = db.Where("(first_name = ? AND last_name = ?) AND citizen_id IS NULL",
+			authUser.Data.FirstName,
+			authUser.Data.LastName)
+	}
+
+	err := query.Find(&citizens).Error
+	if err != nil {
+		fmt.Println("Error finding citizen: ", err)
+		return
+	}
+	fmt.Println(" find citizen >>>>>>>> ", citizens, " / len :", len(citizens))
+
+	// Check if no citizen records were found
+	if len(citizens) == 0 {
+		fmt.Println("No citizens found with the given criteria.")
+		return
+	}
+
+	// Update each citizen with the new ID
+	for i := range citizens {
+		id, err := uuid.Parse(authUser.Data.ID)
+		if err != nil {
+			panic("Invalid UUID format")
+		}
+		citizens[i].CitizenId = &id
+		if err := db.Save(&citizens[i]).Error; err != nil {
+			fmt.Println("Error updating citizen ID for record:", citizens[i], "Error:", err)
+			return
+		}
+	}
 }
 
 func GetProfile() string {

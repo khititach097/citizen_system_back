@@ -221,6 +221,31 @@ paths:
       summary: Preview image
       tags:
       - s3
+  /api/v1/users/profile:
+    get:
+      consumes:
+      - application/json
+      description: Get Citizen User Profile
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get Profile
+      tags:
+      - users
 securityDefinitions:
   BearerAuth:
     in: header
