@@ -96,35 +96,65 @@ func GetAssetByUserID(query asset_types.QueryParams) (interface{}, error) {
 
 		// Build the base query for land IDs
 		landIDsSQL := `
-			SELECT id as land_id, al.muni_code 
-			FROM as_lands al 
-			WHERE id IN (
-				SELECT DISTINCT al.id AS land_id
-				FROM as_lands al
-				LEFT JOIN as_land_owners alo ON al.id = alo.land_id
-				WHERE alo.owner_id = ? 
-				UNION
-				SELECT DISTINCT al.id AS land_id
-				FROM as_lands al
-				LEFT JOIN as_buildings ab ON al.id = ab.land_id
-				WHERE ab.id IN (
-					SELECT building_id
-					FROM as_building_owners abo
-					WHERE abo.owner_id = ? 
+			WITH combined_assets AS (
+				SELECT 
+						id AS asset_id,
+						al.id as land_id,
+						al.muni_code, 
+						al.parcel_no, 
+						al.parcel_type, 
+						'land' AS asset_type
+				FROM as_lands al 
+				WHERE id IN (
+						SELECT DISTINCT al.id AS land_id
+						FROM as_lands al
+						LEFT JOIN as_land_owners alo ON al.id = alo.land_id
+						WHERE alo.owner_id = ?
+						UNION
+						SELECT DISTINCT al.id AS land_id
+						FROM as_lands al
+						LEFT JOIN as_buildings ab ON al.id = ab.land_id
+						WHERE ab.id IN (
+								SELECT building_id
+								FROM as_building_owners abo
+								WHERE abo.owner_id = ?
+						)
+						UNION
+						SELECT DISTINCT al.id AS land_id
+						FROM as_lands al
+						LEFT JOIN as_signboards as2 ON al.id = as2.land_id
+						WHERE as2.id IN (
+								SELECT signboard_id
+								FROM as_signboard_owners aso
+								WHERE aso.owner_id = ?
+						)
 				)
 				UNION
-				SELECT DISTINCT al.id AS land_id
-				FROM as_lands al
-				LEFT JOIN as_signboards as2 ON al.id = as2.land_id
-				WHERE as2.id IN (
-					SELECT signboard_id
-					FROM as_signboard_owners aso
-					WHERE aso.owner_id = ? 
+				SELECT 
+						ac.id AS asset_id, 
+						al.id as land_id,
+						ac.muni_code, 
+						al.parcel_no, 
+						al.parcel_type, 
+						'condo' AS asset_type
+				FROM as_condos ac
+				LEFT JOIN as_lands al ON ac.land_id = al.id
+				WHERE ac.id IN (
+						SELECT acr.condo_id 
+						FROM as_condo_rooms acr 
+						WHERE acr.id IN (
+								SELECT aco.condo_room_id 
+								FROM as_condo_owners aco 
+								WHERE aco.owner_id = ?
+						)
 				)
-			)`
+		)
+		SELECT * 
+		FROM combined_assets
+		ORDER BY muni_code, parcel_no `
 
 		fmt.Println("citizen id ***>>>", citizen["id"])
-		args := []interface{}{citizen["id"], citizen["id"], citizen["id"]}
+		args := []interface{}{citizen["id"], citizen["id"], citizen["id"], citizen["id"]}
 
 		if query.MuniCode != "" {
 			landIDsSQL += " AND al.muni_code = ?"
@@ -140,26 +170,41 @@ func GetAssetByUserID(query asset_types.QueryParams) (interface{}, error) {
 
 		// fmt.Println("all land id ***>>>", landIDs)
 
-		var landIDs []map[string]interface{}
-		if err := db.Raw(landIDsSQL, args...).Scan(&landIDs).Error; err != nil {
+		var allAssets []map[string]interface{}
+		if err := db.Raw(landIDsSQL, args...).Scan(&allAssets).Error; err != nil {
 			return nil, fmt.Errorf("error querying land IDs: %w", err)
 		}
 
-		fmt.Println("all land id ***>>>", landIDs)
+		fmt.Println("all asset id ***>>>", allAssets)
 		// Process land IDs and get details
-		for _, landID := range landIDs {
-			landIDVal, ok := landID["land_id"].(string)
-			if !ok {
-				return nil, fmt.Errorf("invalid land_id")
+		for _, asset := range allAssets {
+			assetIDVal, assetIdOk := asset["asset_id"].(string)
+			if !assetIdOk {
+				return nil, fmt.Errorf("invalid asset_id")
 			}
-			muniCodeVal, ok := landID["muni_code"].(string)
-			if !ok {
+			muniCodeVal, muniCodeOk := asset["muni_code"].(string)
+			if !muniCodeOk {
 				return nil, fmt.Errorf("invalid muni_code")
 			}
+			assetTypeVal, assetTypeOk := asset["asset_type"].(string)
+			if !assetTypeOk {
+				return nil, fmt.Errorf("invalid asset_type")
+			}
 
-			assetData, err := getLandDetails(landIDVal, muniCodeVal)
-			if err != nil {
-				return nil, fmt.Errorf("error getting land details: %w", err)
+			var assetData interface{}
+			var err error
+
+			if assetTypeVal == "land" {
+				assetData, err = getLandDetails(assetIDVal, muniCodeVal)
+				if err != nil {
+					return nil, fmt.Errorf("error getting land details: %w", err)
+				}
+			}
+			if assetTypeVal == "condo" {
+				assetData, err = getCondoDetails(assetIDVal, muniCodeVal)
+				if err != nil {
+					return nil, fmt.Errorf("error getting condo details: %w", err)
+				}
 			}
 
 			// Append land details to the data
@@ -168,34 +213,63 @@ func GetAssetByUserID(query asset_types.QueryParams) (interface{}, error) {
 
 		// Get total count using similar query without pagination
 		countSQL := `
-			SELECT COUNT(DISTINCT al.id) 
-			FROM as_lands al
-			WHERE al.id IN (
-				SELECT DISTINCT al.id AS land_id
-				FROM as_lands al
-				LEFT JOIN as_land_owners alo ON al.id = alo.land_id
-				WHERE alo.owner_id = ? 
-				UNION
-				SELECT DISTINCT al.id AS land_id
-				FROM as_lands al
-				LEFT JOIN as_buildings ab ON al.id = ab.land_id
-				WHERE ab.id IN (
-					SELECT building_id
-					FROM as_building_owners abo
-					WHERE abo.owner_id = ? 
+			WITH combined_assets AS (
+				SELECT 
+						id AS asset_id,
+						al.id as land_id,
+						al.muni_code, 
+						al.parcel_no, 
+						al.parcel_type, 
+						'land' AS asset_type
+				FROM as_lands al 
+				WHERE id IN (
+						SELECT DISTINCT al.id AS land_id
+						FROM as_lands al
+						LEFT JOIN as_land_owners alo ON al.id = alo.land_id
+						WHERE alo.owner_id = ?
+						UNION
+						SELECT DISTINCT al.id AS land_id
+						FROM as_lands al
+						LEFT JOIN as_buildings ab ON al.id = ab.land_id
+						WHERE ab.id IN (
+								SELECT building_id
+								FROM as_building_owners abo
+								WHERE abo.owner_id = ?
+						)
+						UNION
+						SELECT DISTINCT al.id AS land_id
+						FROM as_lands al
+						LEFT JOIN as_signboards as2 ON al.id = as2.land_id
+						WHERE as2.id IN (
+								SELECT signboard_id
+								FROM as_signboard_owners aso
+								WHERE aso.owner_id = ?
+						)
 				)
 				UNION
-				SELECT DISTINCT al.id AS land_id
-				FROM as_lands al
-				LEFT JOIN as_signboards as2 ON al.id = as2.land_id
-				WHERE as2.id IN (
-					SELECT signboard_id
-					FROM as_signboard_owners aso
-					WHERE aso.owner_id = ? 
+				SELECT 
+						ac.id AS asset_id, 
+						al.id as land_id,
+						ac.muni_code, 
+						al.parcel_no, 
+						al.parcel_type, 
+						'condo' AS asset_type
+				FROM as_condos ac
+				LEFT JOIN as_lands al ON ac.land_id = al.id
+				WHERE ac.id IN (
+						SELECT acr.condo_id 
+						FROM as_condo_rooms acr 
+						WHERE acr.id IN (
+								SELECT aco.condo_room_id 
+								FROM as_condo_owners aco 
+								WHERE aco.owner_id = ?
+						)
 				)
-			)`
+		)
+		SELECT count(*) 
+		FROM combined_assets`
 
-		countArgs := []interface{}{citizen["id"], citizen["id"], citizen["id"]}
+		countArgs := []interface{}{citizen["id"], citizen["id"], citizen["id"], citizen["id"]}
 
 		if query.MuniCode != "" {
 			countSQL += " AND al.muni_code = ?"
@@ -350,9 +424,63 @@ func getLandDetails(landID string, muniCode string) (interface{}, error) {
 	landData["asset_images"] = landAssetImages
 
 	return map[string]interface{}{
+		"asset_type": "land",
 		"land_data":  landData,
 		"buildings":  buildings,
 		"signboards": signboards,
+	}, nil
+}
+
+func getCondoDetails(condoId string, muniCode string) (interface{}, error) {
+	var db = database.GetDB()
+
+	condoSQL := `
+		SELECT 
+				ac.*,
+				al.parcel_type,
+				pdt.doc_type_name,
+				md.province_name_t AS province_name,
+				md.district_name_t AS district_name,
+				ms.subdistrict_name_t AS subdistrict_name,
+				mp.postcodemain
+		FROM 
+				as_condos ac
+		LEFT JOIN 
+				as_lands al 
+				ON al.id = ac.land_id 
+		LEFT JOIN 
+				property_doc_type pdt 
+				ON al.parcel_type = pdt.doc_type_id
+		LEFT JOIN 
+				master_district md 
+				ON md.district_code = ac.district_id
+		LEFT JOIN 
+				master_subdistrict ms 
+				ON ms.subdistrict_code = ac.subdistrict_id
+		LEFT JOIN (
+				SELECT 
+						DISTINCT ON (districtid) districtid, 
+						postcodemain 
+				FROM 
+						master_postcode
+		) mp
+				ON md.district_code = mp.districtid
+		WHERE 
+				ac.id = ?;
+		`
+
+	var condoData map[string]interface{}
+	if err := db.Raw(condoSQL, condoId).Scan(&condoData).Error; err != nil {
+		return nil, fmt.Errorf("error getting condo details: %w", err)
+	}
+
+	assetImages := GetAssetAttachmentLatestSurveyByAssetId(condoId, condoId)
+
+	condoData["asset_images"] = assetImages
+
+	return map[string]interface{}{
+		"asset_type": "condo",
+		"condo_data": condoData,
 	}, nil
 }
 
@@ -448,6 +576,7 @@ func GetAssetByCondoId(condoId string) (map[string]interface{}, error) {
 	latestSurveyRequest := survey_request_survices.FindLatestSurveyRequestByAssetId(condoId, "", "")
 
 	response := map[string]interface{}{
+		"asset_type":            "condo",
 		"latest_survey_request": latestSurveyRequest,
 	}
 
@@ -967,6 +1096,38 @@ func GetBuildingOwnersByBuildingId(buildingId string, muniCode string) []map[str
 
 	return landOwners
 }
+func GetBuildingUsedByBuildingUsedId(buildingUsedId string) []map[string]interface{} {
+	var db = database.GetDB()
+
+	query := `
+        SELECT 
+						abu.*, 
+						prt.rent_type_detail, 
+						put.using_type_detail, 
+						pht.household_type_name
+				FROM 
+						as_building_used abu
+				LEFT JOIN 
+						property_using_type put 
+						ON abu.building_using_type_id = put.using_type_id
+				LEFT JOIN 
+						property_rent_type prt 
+						ON abu.property_rent_type_id = prt.rent_type_id
+				LEFT JOIN 
+						property_household_type pht 
+						ON abu.building_household_type_id = pht.household_type_id
+				WHERE 
+						abu.id = ?;
+    `
+	var buildingUsed = []map[string]interface{}{}
+	result := db.Raw(query, buildingUsedId).Scan(&buildingUsed)
+	if result.Error != nil {
+		fmt.Println("Error fetching data:", result.Error)
+		return []map[string]interface{}{}
+	}
+
+	return buildingUsed
+}
 
 func GetAdjoiningLandDetailListByLandID(landID string, muniCode string) []map[string]interface{} {
 	var db = database.GetDB()
@@ -1160,9 +1321,11 @@ func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[s
           c.corporate_name,
           pn."name" AS prefix_name,
           pt.person_type_name,
-          pbmt.building_type_name,
+          pbmt.building_type_name as building_main_type_name,
           abo.owner_line_no,
           pt.person_type_name,
+					pbst.building_type_name as building_sub_type_name,
+					pbdt.building_design_type_name,
           trim(
             concat(
               CASE
@@ -1191,12 +1354,17 @@ func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[s
           LEFT JOIN property_building_main_type pbmt ON pbmt.building_type_id = ab.property_building_main_type_id
           	AND pbmt.muni_code = ?
           	AND pbmt.building_type_year = ab.building_type_year
+					LEFT JOIN property_building_sub_type pbst on pbst.building_sub_id = ab.property_building_sub_type_id 
+         AND pbst.muni_code = ?
+         AND pbst.building_type_year = ab.building_type_year
+				 LEFT JOIN property_building_design_type pbdt on pbdt.building_design_type_id = ab.building_design_type_id
         WHERE ab.land_used_id = ?
           AND (ab.deleted_at IS NULL AND ab.deleted_by IS NULL)
           AND ab.muni_code = ?
         ORDER BY ab.cutax_building_id ASC
-	`, muniCode, muniCode, muniCode, muniCode, landUsedID, muniCode).Scan(&allBuildings).Error
+	`, muniCode, muniCode, muniCode, muniCode, muniCode, landUsedID, muniCode).Scan(&allBuildings).Error
 
+	// fmt.Println("allBuildings ***>>>", allBuildings)
 	if err != nil {
 		fmt.Println("Error fetching data:", err)
 		return []map[string]interface{}{}
@@ -1213,36 +1381,19 @@ func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[s
 			var allBuildOwners = GetBuildingOwnersByBuildingId(buildingId, muniCode)
 			// Add building owners to the data
 			allBuildings[i]["building_owners"] = allBuildOwners
+
+			var buildingUsed = []map[string]interface{}{}
+			var buildingUsedId, ok = allBuildings[i]["building_used_id"].(string)
+			if ok {
+				buildingUsed = GetBuildingUsedByBuildingUsedId(buildingUsedId)
+			}
+			if len(buildingUsed) > 0 {
+				allBuildings[i]["building_used"] = buildingUsed[0]
+			} else {
+				allBuildings[i]["building_used"] = []map[string]interface{}{}
+			}
 		}
 
-		// Check if building has an ID
-		// if buildingID, ok := data[i]["id"].(string); ok && buildingID != "" {
-		// 	// Fetch building owners based on building ID
-		// 	err := db.Raw(`
-		// 		SELECT *
-		// 		FROM as_building_owners
-		// 		WHERE building_id = ?`, buildingID).Scan(&allBuildOwners).Error
-
-		// 	if err != nil {
-		// 		fmt.Println("Error fetching building owners:", err)
-		// 		return []map[string]interface{}{}
-		// 	}
-
-		// 	// Fetch citizen data for each owner
-		// 	for j := 0; j < len(allBuildOwners); j++ {
-		// 		if ownerID, ok := allBuildOwners[j]["owner_id"].(string); ok && ownerID != "" {
-		// 			var citizen models.Citizen
-		// 			err := db.Where("id = ?", ownerID).First(&citizen).Error
-
-		// 			if err != nil {
-		// 				fmt.Println("Error fetching citizen data:", err)
-		// 				return []map[string]interface{}{}
-		// 			}
-
-		// 			allBuildOwners[j]["citizen"] = citizen
-		// 		}
-		// 	}
-		// }
 	}
 
 	// Return the transformed result
@@ -1252,14 +1403,12 @@ func GetLandUsedBuildingByLandUsedId(landUsedID string, muniCode string) []map[s
 func GetLandUsedsInfo(landID string, muniCode string) []map[string]interface{} {
 	allLandUsed := GetLandUsedsWithoutBuildingOnLandByLandId(landID, muniCode)
 
-	// fmt.Println("allLandUsed ***>>>", allLandUsed)
-
 	if len(allLandUsed) == 0 {
 		return []map[string]interface{}{}
 	}
 
 	var wg sync.WaitGroup
-	var ownersMutex, buildingsMutex, imagesMutex sync.Mutex
+	var ownersMutex, imagesMutex sync.Mutex
 
 	// Fetch land used owners and citizens
 	fetchLandUsedOwners := func(i int) {
@@ -1267,22 +1416,7 @@ func GetLandUsedsInfo(landID string, muniCode string) []map[string]interface{} {
 
 		landUsedId, ok := allLandUsed[i]["id"].(string)
 		if ok {
-			var findAllAsLandUsedOwners = GetLandUsedOwnersByLandUsedId(landUsedId, muniCode)
-			// err := db.Raw(`
-			// 	SELECT * FROM as_land_used_owners aluo
-			// 	WHERE aluo.land_used_id = ? AND aluo.deleted_at IS NULL
-			// `, allLandUsed[i]["id"]).Scan(&findAllAsLandUsedOwners).Error
-
-			// fmt.Println("allLandUsed[i] id ***>>>", allLandUsed[i]["id"])
-			// fmt.Println("findAllAsLandUsedOwners ***>>>", findAllAsLandUsedOwners)
-			// if err != nil {
-			// 	fmt.Println("Error fetching as_land_used_owners:", err)
-			// 	return
-			// }
-			// for j := range findAllAsLandUsedOwners {
-			// 	citizen := fetchCitizens(findAllAsLandUsedOwners[j]["owner_id"])
-			// 	findAllAsLandUsedOwners[j]["citizen"] = citizen
-			// }
+			findAllAsLandUsedOwners := GetLandUsedOwnersByLandUsedId(landUsedId, muniCode)
 
 			ownersMutex.Lock()
 			allLandUsed[i]["land_used_owners"] = findAllAsLandUsedOwners
@@ -1290,51 +1424,46 @@ func GetLandUsedsInfo(landID string, muniCode string) []map[string]interface{} {
 		}
 	}
 
-	// Fetch building data
-	fetchBuildings := func(i int) {
-		defer wg.Done()
+	// Fetch building data first, synchronously for each land use
+	for i := range allLandUsed {
 		landUsedid, ok := allLandUsed[i]["id"].(string)
 		if ok {
 			buildings := GetLandUsedBuildingByLandUsedId(landUsedid, muniCode)
-			buildingsMutex.Lock()
 			allLandUsed[i]["buildings"] = buildings
-			buildingsMutex.Unlock()
 		}
 	}
 
 	// Fetch images for land used and buildings
 	fetchImages := func(i int) {
 		defer wg.Done()
-		land_used_id, ok := allLandUsed[i]["id"].(string)
+
+		// Fetch land used images
+		landUsedId, ok := allLandUsed[i]["id"].(string)
 		if ok {
-			imagesLandUsed := GetAssetAttachmentLatestSurveyByAssetId(land_used_id, landID)
+			imagesLandUsed := GetAssetAttachmentLatestSurveyByAssetId(landUsedId, landID)
 			imagesMutex.Lock()
 			allLandUsed[i]["asset_images"] = imagesLandUsed
 			imagesMutex.Unlock()
 		}
 
-		if buildings, ok := allLandUsed[i]["buildings"].([]map[string]interface{}); ok && len(buildings) > 0 {
-			var imageBuildings []asset_types.AssetAttachment
-			for _, building := range buildings {
-				building_id, ok := building["id"].(string)
-				if ok {
-					imageBuildings = append(imageBuildings, GetAssetAttachmentLatestSurveyByAssetId(building_id, landID)...)
+		// Fetch building images
+		if buildings, ok := allLandUsed[i]["buildings"].([]map[string]interface{}); ok {
+			for j, building := range buildings {
+				if buildingId, ok := building["id"].(string); ok {
+					buildingImages := GetAssetAttachmentLatestSurveyByAssetId(buildingId, landID)
+
+					imagesMutex.Lock()
+					allLandUsed[i]["buildings"].([]map[string]interface{})[j]["asset_images"] = buildingImages
+					imagesMutex.Unlock()
 				}
 			}
-
-			imagesMutex.Lock()
-			for j := range buildings {
-				allLandUsed[i]["buildings"].([]map[string]interface{})[j]["asset_images"] = imageBuildings[j]
-			}
-			imagesMutex.Unlock()
 		}
 	}
 
-	// Start all goroutines
+	// Start goroutines for owners and images
 	for i := range allLandUsed {
-		wg.Add(3) // Three goroutines per land used: owners, buildings, images
+		wg.Add(2) // Two goroutines per land used: owners and images
 		go fetchLandUsedOwners(i)
-		go fetchBuildings(i)
 		go fetchImages(i)
 	}
 	wg.Wait()
@@ -1628,7 +1757,7 @@ func GetAllSignboardsOnLandByLandID(landID string, muniCode string) []map[string
 	var landSignboards = []map[string]interface{}{}
 
 	query := `
-	SELECT
+			SELECT
           as2.id,
           as2.land_id,
           as2.signboard_text,
@@ -1666,6 +1795,9 @@ func GetAllSignboardsOnLandByLandID(landID string, muniCode string) []map[string
           as2.cancel_date,
           as2.cancel_by,
           as2.cancel_at,
+					as2.address_village_name,
+					as2.address_postcode ,
+					as2.signboard_name ,
           pst.signboard_type_id,
           pst.signboard_type_name,
           psdt.property_signboard_display_type,
@@ -1691,7 +1823,10 @@ func GetAllSignboardsOnLandByLandID(landID string, muniCode string) []map[string
               WHEN c.person_type_id = 99 THEN c.corporate_name
               ELSE concat(pn."name", ' ', c.corporate_name)
             END
-          ) AS text_owner_fullname
+          ) AS text_owner_fullname,
+          md.province_name_t AS province_name,
+					md.district_name_t AS district_name,
+					ms.subdistrict_name_t AS subdistrict_name
           FROM as_signboards as2
             LEFT JOIN property_signboard_type pst ON pst.signboard_type_id = as2.property_signboard_type_id
             LEFT JOIN property_signboard_display_type psdt ON psdt.property_signboard_display_type = as2.property_signboard_display_type_id
@@ -1703,6 +1838,8 @@ func GetAllSignboardsOnLandByLandID(landID string, muniCode string) []map[string
             LEFT JOIN citizen c ON c.id = aso.owner_id AND c.muni_code = ?
             LEFT JOIN person_type pt ON pt.person_type_id = c.person_type_id
             LEFT JOIN prefix_name pn ON pn.id = c.prefix_name_id AND pn.person_type = c.person_type_id
+            LEFT JOIN master_district md ON md.district_code::numeric = as2.address_district_id 
+            LEFT JOIN master_subdistrict ms ON as2.address_sub_district_id::text = ms.subdistrict_code
           WHERE as2.land_id = ?
             AND (as2.deleted_at IS NULL AND as2.deleted_by IS NULL)
             AND as2.muni_code = ?
