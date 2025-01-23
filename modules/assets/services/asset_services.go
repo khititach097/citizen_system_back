@@ -562,6 +562,7 @@ func GetAssetByLandId(landId string) (map[string]interface{}, error) {
 	}
 
 	response := map[string]interface{}{
+		"asset_type":            "land",
 		"latest_survey_request": latestSurveyRequest,
 		"land_info":             landInfo,
 		"land_used_info":        getLandUsedsInfo,
